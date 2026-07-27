@@ -1,0 +1,21 @@
+employee_id,full_name,manager_id,status,hire_date,termination_date,department
+E001,Ava Chen,,active,2019-03-12,,Executive
+E002,Marcus Webb,E001,active,2020-01-08,,Operations
+E003,Priya Nair,E001,active,2019-07-22,,People
+E004,Jordan Blake,E001,active,2021-02-15,,Finance
+E005,Sofia Alvarez,E002,active,2020-06-01,,Operations
+E006,Noah Patel,E002,active,2021-09-14,,Operations
+E007,Elena Rossi,E002,terminated,2020-11-03,2025-04-18,Operations
+E008,Chris Okonkwo,E003,active,2022-01-10,,People
+E009,Maya Thompson,E003,active,2022-05-23,,People
+E010,Liam Ortega,E003,active,2023-03-01,,People
+E011,Hannah Kim,E004,active,2021-08-19,,Finance
+E012,Diego Santos,E004,terminated,2022-02-07,2025-11-02,Finance
+E013,Amara Diallo,E005,active,2023-06-12,,Operations
+E014,Ben Foster,E005,active,2023-08-28,,Operations
+E015,Yuki Tanaka,E006,active,2024-01-15,,Operations
+E016,Rachel Green,E006,active,2024-03-04,,Operations
+E017,Omar Haddad,E008,active,2024-02-20,,People
+E018,Claire Dubois,E008,terminated,2023-10-09,2026-01-30,People
+E019,Sam Irvin,E009,active,2024-07-01,,People
+E020,Tina Zhou,E011,active,2024-09-16,,Finance
