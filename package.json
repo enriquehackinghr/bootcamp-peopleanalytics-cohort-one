@@ -2,25 +2,22 @@
   "name": "meridian-analytics-dashboard",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -p tsconfig.app.json --noEmit && vite build",
-    "preview": "vite preview",
-    "preview:build": "npm run build && vite preview",
-    "start": "serve -s dist -l tcp://0.0.0.0:$PORT"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0",
+    "preview:build": "npm run build && next start --hostname 0.0.0.0 --port 4173"
   },
   "dependencies": {
+    "next": "^15.4.5",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "serve": "^14.2.6",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/node": "^22.16.5",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
-    "@vitejs/plugin-react": "^4.4.1",
-    "typescript": "~5.8.3",
-    "vite": "^6.3.3"
+    "typescript": "~5.8.3"
   }
 }

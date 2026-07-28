@@ -1,10 +1,12 @@
+'use client'
+
 import { useId, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import {
   computeWorkforceMetrics,
   isAcceptedEmployeeFile,
   parseEmployeeFile,
   type WorkforceMetrics,
-} from './lib/metrics'
+} from '@/lib/metrics'
 
 type UploadState =
   | { status: 'idle' }
@@ -19,7 +21,7 @@ function formatSpan(value: number): string {
   return value === 0 ? '—' : value.toFixed(1)
 }
 
-export default function App() {
+export function Dashboard() {
   const inputId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
   const [upload, setUpload] = useState<UploadState>({ status: 'idle' })
@@ -141,8 +143,7 @@ export default function App() {
           )}
 
           <p className="schema">
-            Required columns:{' '}
-            <code>employee_id</code>,{' '}
+            Required columns: <code>employee_id</code>,{' '}
             <code>manager_id</code>/<code>manager_employee_id</code>,{' '}
             <code>status</code>/<code>employment_status</code> (active /
             terminated). Optional: <code>full_name</code> or{' '}
