@@ -6,11 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.app.json --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:build": "npm run build && vite preview",
+    "start": "serve -s dist -l tcp://0.0.0.0:$PORT"
   },
   "dependencies": {
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "serve": "^14.2.6",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
