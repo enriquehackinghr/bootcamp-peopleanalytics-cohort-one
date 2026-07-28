@@ -55,6 +55,15 @@ body {
 
   --shadow-tile: 0 1px 2px rgba(26, 31, 43, 0.04), 0 0 0 1px rgba(26, 31, 43, 0.06);
   --shadow-elevated: 0 4px 16px rgba(26, 31, 43, 0.08);
+
+  /* Aliases consumed by Dev 1 surfaces (app/admin/**, app/drill/**) */
+  --font-display: var(--font-instrument), Georgia, serif;
+  --font-body: var(--font-dm-sans), 'Segoe UI', sans-serif;
+  --paper: var(--surface);
+  --line: var(--border);
+  --ink-soft: var(--ink-muted);
+  --teal: var(--s1);
+  --teal-deep: #1a4a72;
 }
 
 /* ---------- Dark mode ---------- */
@@ -86,6 +95,12 @@ body {
 
   --shadow-tile: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(238, 241, 246, 0.06);
   --shadow-elevated: 0 4px 16px rgba(0, 0, 0, 0.35);
+
+  --paper: var(--surface);
+  --line: var(--border);
+  --ink-soft: var(--ink-muted);
+  --teal: var(--s1);
+  --teal-deep: #2a6fa8;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -513,4 +528,137 @@ a {
   .main {
     padding: 16px;
   }
+}
+
+/* Admin / drill placeholders (Dev 1 surfaces) */
+.admin-page {
+  position: relative;
+  z-index: 1;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+.admin-header h1 {
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  font-weight: 400;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.admin-section {
+  margin-top: 2rem;
+}
+
+.admin-card {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  padding: 1rem 1.15rem;
+  margin: 0.75rem 0;
+  backdrop-filter: blur(8px);
+}
+
+.admin-card-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.admin-meta {
+  margin: 0.35rem 0 0.75rem;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.admin-field select,
+.admin-field input,
+.admin-actions button {
+  font: inherit;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.admin-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.admin-actions button {
+  cursor: pointer;
+  background: var(--teal);
+  color: #fff;
+  border-color: var(--teal-deep);
+}
+
+.admin-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Small utility classes consumed by admin/drill surfaces */
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-subtle);
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.lede {
+  font-size: 14px;
+  color: var(--ink-muted);
+  max-width: 62ch;
+  line-height: 1.55;
+  margin: 0.5rem 0 1rem;
+}
+
+.error {
+  color: var(--status-critical);
+  background: color-mix(in srgb, var(--status-critical) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--status-critical) 35%, var(--border));
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.upload-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.upload-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.upload-hint {
+  margin: 0;
+  color: var(--ink-subtle);
+  font-size: 12px;
+}
+
+.upload-action {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--plane);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
 }

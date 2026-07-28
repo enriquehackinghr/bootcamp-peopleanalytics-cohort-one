@@ -36,7 +36,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Admin',
     items: [
-      { href: '/upload', label: 'Data upload', icon: 'M12 3v12m0 0l-4-4m4 4l4-4M5 21h14' },
+      { href: '/admin/upload', label: 'Data upload', icon: 'M12 3v12m0 0l-4-4m4 4l4-4M5 21h14' },
     ],
   },
 ]

@@ -12,7 +12,8 @@ const PAGE_TITLES: Record<string, string> = {
   '/engagement': 'Engagement',
   '/wizard': 'Wizard',
   '/methodology': 'Methodology',
-  '/upload': 'Data upload',
+  '/admin/upload': 'Data upload',
+  '/drill': 'Drill-through',
 }
 
 function titleFor(pathname: string | null): string {

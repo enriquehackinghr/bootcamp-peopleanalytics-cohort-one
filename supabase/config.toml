@@ -1,0 +1,9 @@
+# Optional Supabase CLI config. Link with `supabase link` then `supabase db push`.
+
+project_id = "meridian-people-analytics"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15
