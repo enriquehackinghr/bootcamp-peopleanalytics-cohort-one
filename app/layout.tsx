@@ -16,9 +16,9 @@ const instrumentSerif = Instrument_Serif({
 })
 
 export const metadata: Metadata = {
-  title: 'Meridian Analytics',
+  title: 'Meridian People Analytics',
   description:
-    'People analytics platform — workforce, attrition, compensation, recruiting, and engagement.',
+    'Multi-page, multi-dimensional people analytics — headcount, attrition, compensation, recruiting, engagement.',
 }
 
 export default function RootLayout({
