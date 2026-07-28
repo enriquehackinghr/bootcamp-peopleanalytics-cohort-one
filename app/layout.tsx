@@ -18,7 +18,7 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   title: 'Meridian Analytics',
   description:
-    'Headcount, turnover, and span of control from your employee master file.',
+    'People analytics platform — workforce, attrition, compensation, recruiting, and engagement.',
 }
 
 export default function RootLayout({

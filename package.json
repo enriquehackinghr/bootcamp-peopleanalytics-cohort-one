@@ -6,16 +6,21 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
-    "preview:build": "npm run build && next start --hostname 0.0.0.0 --port 4173"
+    "preview:build": "npm run build && next start --hostname 0.0.0.0 --port 4173",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node scripts/apply-migrations.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.52.1",
     "next": "^15.4.5",
+    "pg": "^8.22.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.16.5",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "typescript": "~5.8.3"
