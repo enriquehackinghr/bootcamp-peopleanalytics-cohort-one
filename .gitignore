@@ -20,3 +20,6 @@ dist-ssr
 *.log
 .vscode/*
 !.vscode/extensions.json
+
+# Claude Code local
+.claude/
