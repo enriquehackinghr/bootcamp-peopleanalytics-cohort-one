@@ -9,11 +9,13 @@ out
 dist
 dist-ssr
 *.local
+tsconfig.tsbuildinfo
 
 # Env
 .env
 .env.local
 .env.*.local
+sample-env.local
 
 # Editor / OS
 .DS_Store

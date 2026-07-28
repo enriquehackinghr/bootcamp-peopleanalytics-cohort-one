@@ -331,3 +331,78 @@ code {
     font-size: 2.6rem;
   }
 }
+
+/* Admin / drill placeholders (Dev 1 surfaces) */
+.admin-page {
+  position: relative;
+  z-index: 1;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+.admin-header h1 {
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  font-weight: 400;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.admin-section {
+  margin-top: 2rem;
+}
+
+.admin-card {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  padding: 1rem 1.15rem;
+  margin: 0.75rem 0;
+  backdrop-filter: blur(8px);
+}
+
+.admin-card-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.admin-meta {
+  margin: 0.35rem 0 0.75rem;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.admin-field select,
+.admin-field input,
+.admin-actions button {
+  font: inherit;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.admin-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.admin-actions button {
+  cursor: pointer;
+  background: var(--teal);
+  color: #fff;
+  border-color: var(--teal-deep);
+}
+
+.admin-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

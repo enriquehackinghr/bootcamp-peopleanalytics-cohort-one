@@ -153,6 +153,8 @@ export function Dashboard() {
             <a href="/sample-employee-master.csv" download>
               Download sample CSV
             </a>
+            {' · '}
+            <a href="/admin/upload">Admin multi-file load</a>
           </p>
         </section>
 
