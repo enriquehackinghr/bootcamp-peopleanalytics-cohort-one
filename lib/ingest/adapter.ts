@@ -15,6 +15,12 @@ export const TARGET_TABLES: TargetTable[] = [
   'recruiters',
   'market_benchmarks',
   'competency_framework',
+  'employee_snapshots',
+  'termination_history',
+  'engagement_score_history',
+  'engagement_survey_waves',
+  'org_events',
+  'exit_interviews',
 ]
 
 /** Required target columns per dataset (ING validation). */
@@ -33,6 +39,12 @@ export const REQUIRED_COLUMNS: Record<TargetTable, string[]> = {
   recruiters: ['recruiter_id'],
   market_benchmarks: ['function_name', 'apex_level', 'apex_tier'],
   competency_framework: ['competency_id', 'competency_name'],
+  employee_snapshots: ['snapshot_id', 'as_of_date', 'employee_id'],
+  termination_history: ['termination_id', 'employee_id', 'termination_date'],
+  engagement_score_history: ['response_id', 'employee_id', 'observation_date'],
+  engagement_survey_waves: ['response_id', 'wave_id'],
+  org_events: ['event_id', 'employee_id', 'event_date'],
+  exit_interviews: ['interview_id', 'employee_id'],
 }
 
 const DATASET_HINTS: { key: TargetTable; tokens: string[] }[] = [
@@ -50,6 +62,30 @@ const DATASET_HINTS: { key: TargetTable; tokens: string[] }[] = [
   { key: 'recruiters', tokens: ['recruiter_id', 'recruiter_name'] },
   { key: 'market_benchmarks', tokens: ['apex_level', 'apex_tier', 'p50'] },
   { key: 'competency_framework', tokens: ['competency_name', 'competency_group'] },
+  {
+    key: 'employee_snapshots',
+    tokens: ['snapshot_id', 'as_of_date', 'in_employee_master', 'tenure_months'],
+  },
+  {
+    key: 'termination_history',
+    tokens: ['termination_id', 'tenure_months_at_exit', 'tenure_band_at_exit'],
+  },
+  {
+    key: 'engagement_score_history',
+    tokens: ['observation_date', 'engagement_score', 'instrument', 'collection_method'],
+  },
+  {
+    key: 'engagement_survey_waves',
+    tokens: ['wave_id', 'wave_label', 'is_manager', 'q01'],
+  },
+  {
+    key: 'org_events',
+    tokens: ['event_id', 'event_type', 'prior_value', 'new_value', 'reorg_scope'],
+  },
+  {
+    key: 'exit_interviews',
+    tokens: ['interview_id', 'primary_driver', 'regrettable_flag', 'would_recommend_score'],
+  },
 ]
 
 export function normalizeHeader(header: string): string {
@@ -79,20 +115,44 @@ export function detectDatasetKey(headers: string[]): {
   confidence: number
 } {
   const normalized = headers.map(normalizeHeader)
-  let best: { key: TargetTable | 'unknown'; confidence: number } = {
-    key: 'unknown',
-    confidence: 0,
-  }
+  const set = new Set(normalized)
 
-  for (const hint of DATASET_HINTS) {
-    const hits = hint.tokens.filter((t) => normalized.includes(t)).length
-    const confidence = hits / hint.tokens.length
-    if (confidence > best.confidence) {
-      best = { key: hint.key, confidence }
+  // Distinctive primary columns beat generic overlap (e.g. snapshots vs employees).
+  const distinctive: [TargetTable, string][] = [
+    ['employee_snapshots', 'snapshot_id'],
+    ['termination_history', 'termination_id'],
+    ['engagement_survey_waves', 'wave_id'],
+    ['engagement_score_history', 'observation_date'],
+    ['exit_interviews', 'interview_id'],
+    ['org_events', 'prior_value'],
+  ]
+  for (const [key, token] of distinctive) {
+    if (set.has(token)) {
+      const hint = DATASET_HINTS.find((h) => h.key === key)
+      const hits = hint ? hint.tokens.filter((t) => set.has(t)).length : 1
+      const denom = hint?.tokens.length ?? 1
+      return { key, confidence: Math.max(0.8, hits / denom) }
     }
   }
 
-  return best
+  let best: { key: TargetTable | 'unknown'; confidence: number; hits: number } = {
+    key: 'unknown',
+    confidence: 0,
+    hits: 0,
+  }
+
+  for (const hint of DATASET_HINTS) {
+    const hits = hint.tokens.filter((t) => set.has(t)).length
+    const confidence = hits / hint.tokens.length
+    if (
+      confidence > best.confidence ||
+      (confidence === best.confidence && hits > best.hits)
+    ) {
+      best = { key: hint.key, confidence, hits }
+    }
+  }
+
+  return { key: best.key, confidence: best.confidence }
 }
 
 function cellToString(value: unknown): string {
@@ -171,8 +231,12 @@ export class FileSourceAdapter implements SourceAdapter {
     }
 
     return matrices
-      .filter((m) => m.matrix.length > 0)
+      .filter((m) => {
+        if (/::\s*readme$/i.test(m.label)) return false
+        return m.matrix.length > 1
+      })
       .map((m) => matrixToRawTable(m.label, m.matrix))
+      .filter((t) => t.datasetKey !== 'unknown' || t.rowCount > 0)
   }
 }
 
@@ -225,6 +289,12 @@ export const COLUMN_ALIASES: Record<string, string> = {
   end_date: 'termination_date',
   start_date: 'hire_date',
   currency: 'currency_code',
+  currency_code: 'currency_code',
   pay_zone: 'pay_zone',
   base: 'base_salary',
+  office_location: 'office_location',
+  work_country: 'work_country',
+  termination_reason: 'termination_reason',
+  direct_reports: 'direct_reports',
+  engagement_score: 'engagement_score',
 }

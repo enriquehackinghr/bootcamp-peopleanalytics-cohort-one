@@ -1,6 +1,7 @@
 import { getServiceSupabase, hasDatabaseConfig } from '@/lib/db/client'
 import { filtersToJson } from '@/lib/db/filters'
 import type {
+  ChartSeriesPoint,
   FilterContext,
   WizardChartSpec,
   WizardCitation,
@@ -24,6 +25,27 @@ async function rpc(fn: string, filters: FilterContext): Promise<number> {
     return 0
   }
   return Number(data ?? 0)
+}
+
+async function headcountByFunction(
+  filters: FilterContext,
+): Promise<ChartSeriesPoint[]> {
+  if (!hasDatabaseConfig()) return []
+  const supabase = getServiceSupabase()
+  const { data } = await supabase
+    .from('employees')
+    .select('function_name, department, employment_status')
+    .in('employment_status', ['Active', 'active', 'On Leave', 'on leave'])
+  const counts = new Map<string, number>()
+  for (const row of data ?? []) {
+    const fn = row.function_name || row.department || 'Unknown'
+    if (filters.functions.length && !filters.functions.includes(fn)) continue
+    counts.set(fn, (counts.get(fn) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .map(([x, y]) => ({ x, y }))
+    .sort((a, b) => b.y - a.y)
+    .slice(0, 14)
 }
 
 export async function runWizardToolQuery(
@@ -54,7 +76,10 @@ export async function runWizardToolQuery(
     citations.push(
       { measureId: 'voluntary_attrition_rate', tables: ['employees'] },
       { measureId: 'involuntary_attrition', tables: ['employees'] },
-      { measureId: 'regrettable_attrition', tables: ['employees', 'performance_reviews'] },
+      {
+        measureId: 'regrettable_attrition',
+        tables: ['employees', 'performance_reviews'],
+      },
     )
   }
 
@@ -66,7 +91,13 @@ export async function runWizardToolQuery(
       { measureId: 'compa_ratio', tables: ['employees'] },
       {
         measureId: 'market_position',
-        tables: ['employees', 'level_map', 'pay_zone_map', 'fx_rates', 'market_benchmarks'],
+        tables: [
+          'employees',
+          'level_map',
+          'pay_zone_map',
+          'fx_rates',
+          'market_benchmarks',
+        ],
       },
     )
   }
@@ -108,6 +139,10 @@ export async function runWizardToolQuery(
 
   let chart: WizardChartSpec | null = null
   if (wantsAttrition) {
+    const headcount = snapshot.active_headcount || 1
+    const voluntaryCount = Math.round(
+      ((snapshot.voluntary_attrition_rate ?? 0) / 100) * headcount,
+    )
     chart = {
       form: 'stacked_bar',
       dimension: 'termination_type',
@@ -115,6 +150,22 @@ export async function runWizardToolQuery(
       series: 'type',
       filters,
       title: 'Attrition by type (TTM)',
+      seriesKeys: ['Voluntary', 'Involuntary', 'Regrettable'],
+      points: [
+        { x: 'TTM', y: voluntaryCount, series: 'Voluntary' },
+        {
+          x: 'TTM',
+          y: snapshot.involuntary_attrition ?? 0,
+          series: 'Involuntary',
+        },
+        {
+          x: 'TTM',
+          y: snapshot.regrettable_attrition ?? 0,
+          series: 'Regrettable',
+        },
+      ],
+      summary: 'Three separate series — never blended.',
+      methodologyId: 'voluntary_attrition_rate',
     }
   } else if (wantsHeadcount) {
     chart = {
@@ -123,6 +174,9 @@ export async function runWizardToolQuery(
       measure: 'active_headcount',
       filters,
       title: 'Active headcount by function',
+      points: await headcountByFunction(filters),
+      summary: 'Sorted descending by headcount.',
+      methodologyId: 'active_headcount',
     }
   }
 

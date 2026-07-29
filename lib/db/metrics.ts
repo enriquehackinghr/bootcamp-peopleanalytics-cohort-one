@@ -1,5 +1,5 @@
 import { getServiceSupabase, hasDatabaseConfig } from '@/lib/db/client'
-import { filtersToJson } from '@/lib/db/filters'
+import { effectiveFilters, filtersToJson } from '@/lib/db/filters'
 import { METHODOLOGY_FALLBACK } from '@/lib/methodology/catalog'
 import type {
   ChartPayload,
@@ -32,7 +32,12 @@ async function rpcNumber(
 
 export async function getFreshness(): Promise<DataFreshness> {
   if (!hasDatabaseConfig()) {
-    return { lastLoadedAt: null, asOfDate: null, sourceSummary: 'Database not configured' }
+    return {
+      lastLoadedAt: null,
+      asOfDate: null,
+      sourceSummary: 'Database not configured',
+      sources: [],
+    }
   }
 
   const supabase = getServiceSupabase()
@@ -40,18 +45,51 @@ export async function getFreshness(): Promise<DataFreshness> {
     .from('data_loads')
     .select('loaded_at, as_of_date, file_names, row_counts')
     .order('loaded_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+    .limit(40)
 
-  if (!data) {
-    return { lastLoadedAt: null, asOfDate: null, sourceSummary: 'No loads yet' }
+  if (!data?.length) {
+    return {
+      lastLoadedAt: null,
+      asOfDate: null,
+      sourceSummary: 'No loads yet',
+      sources: [],
+    }
   }
 
-  const files = Array.isArray(data.file_names) ? data.file_names.join(', ') : null
+  const latest = data[0]
+  const latestFiles = Array.isArray(latest.file_names)
+    ? latest.file_names.join(', ')
+    : null
+
+  // Keep the newest load per filename, and remember which tables it filled.
+  const byFile = new Map<string, { loadedAt: string; tables: Set<string> }>()
+  for (const row of data) {
+    const loadedAt = String(row.loaded_at)
+    const names = Array.isArray(row.file_names) ? row.file_names.map(String) : []
+    const tables = Object.keys((row.row_counts ?? {}) as Record<string, number>)
+    for (const name of names) {
+      const existing = byFile.get(name)
+      if (!existing) {
+        byFile.set(name, { loadedAt, tables: new Set(tables) })
+      } else {
+        for (const table of tables) existing.tables.add(table)
+      }
+    }
+  }
+
+  const sources = [...byFile.entries()]
+    .map(([fileName, value]) => ({
+      fileName,
+      loadedAt: value.loadedAt,
+      tables: [...value.tables].sort(),
+    }))
+    .sort((a, b) => b.loadedAt.localeCompare(a.loadedAt))
+
   return {
-    lastLoadedAt: data.loaded_at,
-    asOfDate: data.as_of_date,
-    sourceSummary: files,
+    lastLoadedAt: latest.loaded_at,
+    asOfDate: latest.as_of_date,
+    sourceSummary: latestFiles,
+    sources,
   }
 }
 
@@ -117,6 +155,7 @@ export async function getFilterMeta(): Promise<FilterMetaResponse> {
 export async function getExecutiveOverview(
   filters: FilterContext,
 ): Promise<PageVisualBundle> {
+  const f = effectiveFilters(filters)
   const freshness = await getFreshness()
   const [
     headcount,
@@ -126,17 +165,17 @@ export async function getExecutiveOverview(
     compa,
     flightRisk,
   ] = await Promise.all([
-    rpcNumber('active_headcount', filters),
-    rpcNumber('voluntary_attrition_rate', filters),
-    rpcNumber('open_requisitions', filters),
-    rpcNumber('engagement_survey_mean', filters),
-    rpcNumber('median_compa_ratio', filters),
-    rpcNumber('elevated_flight_risk_count', filters),
+    rpcNumber('active_headcount', f),
+    rpcNumber('voluntary_attrition_rate', f),
+    rpcNumber('open_requisitions', f),
+    rpcNumber('engagement_survey_mean', f),
+    rpcNumber('median_compa_ratio', f),
+    rpcNumber('elevated_flight_risk_count', f),
   ])
 
   // Prior-period proxy: empty comparison filters still hit same RPCs;
   // real period shift lands when dim_date snapshots are fully populated.
-  const priorFilters: FilterContext = { ...filters, comparison: 'none' }
+  const priorFilters: FilterContext = { ...f, comparison: 'none' }
   const priorHeadcount = await rpcNumber('active_headcount', priorFilters)
 
   const kpis: KpiTile[] = [
@@ -193,13 +232,13 @@ export async function getExecutiveOverview(
   ]
 
   const charts: ChartPayload[] = [
-    await compositionByFunctionChart(filters),
-    await attritionByTypeChart(filters),
-    await funnelChart(filters),
-    await engagementByCategoryChart(filters),
+    await compositionByFunctionChart(f),
+    await attritionByTypeChart(f),
+    await funnelChart(f),
+    await engagementByCategoryChart(f),
   ]
 
-  const table = await employeeDetailTable(filters)
+  const table = await employeeDetailTable(f)
 
   return {
     pageId: 'executive',
@@ -227,13 +266,15 @@ async function compositionByFunctionChart(
   const supabase = getServiceSupabase()
   const { data } = await supabase
     .from('employees')
-    .select('function_name, department, employment_status')
+    .select(
+      'function_name, department, employment_status, office, country, career_level, hire_date',
+    )
     .in('employment_status', ['Active', 'active', 'On Leave', 'on leave'])
 
   const counts = new Map<string, number>()
   for (const row of data ?? []) {
+    if (!employeeMatchesFilters(row, filters)) continue
     const fn = row.function_name || row.department || 'Unknown'
-    if (filters.functions.length && !filters.functions.includes(fn)) continue
     counts.set(fn, (counts.get(fn) ?? 0) + 1)
   }
 
@@ -251,6 +292,203 @@ async function compositionByFunctionChart(
     methodologyId: 'active_headcount',
     summary: `Headcount by function; top cut is ${points[0]?.x ?? 'n/a'}.`,
     emptyReason: points.length ? null : 'No employees match the current filters.',
+  }
+}
+
+async function compositionByLocationChart(
+  filters: FilterContext,
+): Promise<ChartPayload> {
+  if (!hasDatabaseConfig()) {
+    return emptyChart(
+      'composition_by_location',
+      'Composition by location',
+      'horizontal_bar',
+      'location',
+      'active_headcount',
+    )
+  }
+
+  const supabase = getServiceSupabase()
+  const { data } = await supabase
+    .from('employees')
+    .select(
+      'function_name, department, employment_status, office, country, career_level, hire_date',
+    )
+    .in('employment_status', ['Active', 'active', 'On Leave', 'on leave'])
+
+  const counts = new Map<string, number>()
+  for (const row of data ?? []) {
+    if (!employeeMatchesFilters(row, filters)) continue
+    const loc = row.office || row.country || 'Unknown'
+    counts.set(loc, (counts.get(loc) ?? 0) + 1)
+  }
+
+  const points = [...counts.entries()]
+    .map(([x, y]) => ({ x, y }))
+    .sort((a, b) => b.y - a.y)
+
+  return {
+    id: 'composition_by_location',
+    title: 'Composition by location',
+    form: 'horizontal_bar',
+    dimension: 'location',
+    measure: 'active_headcount',
+    points,
+    methodologyId: 'active_headcount',
+    summary: `Headcount by office; top cut is ${points[0]?.x ?? 'n/a'}.`,
+    emptyReason: points.length ? null : 'No employees match the current filters.',
+  }
+}
+
+function tenureBandFromHire(hireDate: string | null, asOf: Date): string {
+  if (!hireDate) return 'Unknown'
+  const hire = new Date(hireDate)
+  if (Number.isNaN(hire.getTime())) return 'Unknown'
+  const years = (asOf.getTime() - hire.getTime()) / (365.25 * 24 * 3600 * 1000)
+  if (years < 1) return '0-1 years'
+  if (years < 2) return '1-2 years'
+  if (years < 5) return '2-5 years'
+  return '5+ years'
+}
+
+function levelBandFromCareer(level: string | null): string {
+  if (!level) return 'Unknown'
+  if (/^P\d/i.test(level) || /^I{1,3}$|^IV$|^V$|^VI$|^VII$/i.test(level)) return 'IC'
+  if (/^M[3-5]/i.test(level) || /SrM|Manager/i.test(level)) return 'Manager'
+  return 'Director+'
+}
+
+type EmployeeCutRow = {
+  function_name?: string | null
+  department?: string | null
+  office?: string | null
+  country?: string | null
+  career_level?: string | null
+  hire_date?: string | null
+}
+
+function employeeMatchesFilters(
+  row: EmployeeCutRow,
+  filters: FilterContext,
+): boolean {
+  const fn = row.function_name || row.department
+  if (filters.functions.length && fn && !filters.functions.includes(fn)) return false
+  if (
+    filters.locations.length &&
+    !(
+      (row.office && filters.locations.includes(row.office)) ||
+      (row.country && filters.locations.includes(row.country))
+    )
+  ) {
+    return false
+  }
+  if (filters.levelBands.length) {
+    const band = levelBandFromCareer(row.career_level ?? null)
+    const exact = row.career_level
+    if (
+      !filters.levelBands.includes(band) &&
+      !(exact && filters.levelBands.includes(exact))
+    ) {
+      return false
+    }
+  }
+  if (filters.tenureBands.length) {
+    const band = tenureBandFromHire(row.hire_date ?? null, new Date())
+    if (!filters.tenureBands.includes(band)) return false
+  }
+  return true
+}
+
+async function compositionByTenureChart(
+  filters: FilterContext,
+): Promise<ChartPayload> {
+  if (!hasDatabaseConfig()) {
+    return emptyChart(
+      'composition_by_tenure',
+      'Tenure profile',
+      'horizontal_bar',
+      'tenure',
+      'active_headcount',
+    )
+  }
+
+  const supabase = getServiceSupabase()
+  const { data } = await supabase
+    .from('employees')
+    .select(
+      'function_name, department, employment_status, office, country, career_level, hire_date',
+    )
+    .in('employment_status', ['Active', 'active', 'On Leave', 'on leave'])
+
+  const asOf = new Date()
+  const order = ['0-1 years', '1-2 years', '2-5 years', '5+ years', 'Unknown']
+  const counts = new Map<string, number>(order.map((k) => [k, 0]))
+  for (const row of data ?? []) {
+    if (!employeeMatchesFilters(row, filters)) continue
+    const band = tenureBandFromHire(row.hire_date ?? null, asOf)
+    counts.set(band, (counts.get(band) ?? 0) + 1)
+  }
+
+  const points = order
+    .filter((k) => (counts.get(k) ?? 0) > 0)
+    .map((x) => ({ x, y: counts.get(x) ?? 0 }))
+
+  return {
+    id: 'composition_by_tenure',
+    title: 'Tenure profile',
+    form: 'horizontal_bar',
+    dimension: 'tenure',
+    measure: 'active_headcount',
+    points,
+    methodologyId: 'active_headcount',
+    summary: `First-year population: ${counts.get('0-1 years') ?? 0}.`,
+    emptyReason: points.length ? null : 'No employees match the current filters.',
+  }
+}
+
+async function attritionByReasonChart(
+  filters: FilterContext,
+): Promise<ChartPayload> {
+  if (!hasDatabaseConfig()) {
+    return emptyChart(
+      'attrition_by_reason',
+      'Stated termination reasons',
+      'horizontal_bar',
+      'reason',
+      'terminations',
+    )
+  }
+
+  const supabase = getServiceSupabase()
+  const { data } = await supabase
+    .from('employees')
+    .select(
+      'termination_reason_code, termination_type, function_name, department, office, country, career_level, hire_date',
+    )
+    .not('termination_date', 'is', null)
+
+  const counts = new Map<string, number>()
+  for (const row of data ?? []) {
+    if (!employeeMatchesFilters(row, filters)) continue
+    const reason = row.termination_reason_code || 'Unspecified'
+    counts.set(reason, (counts.get(reason) ?? 0) + 1)
+  }
+
+  const points = [...counts.entries()]
+    .map(([x, y]) => ({ x, y }))
+    .sort((a, b) => b.y - a.y)
+    .slice(0, 11)
+
+  return {
+    id: 'attrition_by_reason',
+    title: 'Stated termination reasons',
+    form: 'horizontal_bar',
+    dimension: 'reason',
+    measure: 'terminations',
+    points,
+    methodologyId: 'voluntary_attrition_rate',
+    summary: 'Top stated reason codes from terminated employees.',
+    emptyReason: points.length ? null : 'No terminations match the current filters.',
   }
 }
 
@@ -464,7 +702,7 @@ async function employeeDetailTable(filters: FilterContext): Promise<DetailTable>
   const { data } = await supabase
     .from('employees')
     .select(
-      'employee_id, function_name, department, career_level, office, employment_status',
+      'employee_id, function_name, department, career_level, office, country, employment_status, hire_date',
     )
     .in('employment_status', ['Active', 'active', 'On Leave', 'on leave'])
     .limit(500)
@@ -475,16 +713,23 @@ async function employeeDetailTable(filters: FilterContext): Promise<DetailTable>
       function_name: (r.function_name || r.department) as string | null,
       career_level: r.career_level as string | null,
       office: r.office as string | null,
+      hire_date: (r.hire_date as string | null) ?? null,
+      department: r.department as string | null,
+      country: (r.country as string | null) ?? null,
     }))
-    .filter((r) => {
-      if (filters.functions.length && r.function_name && !filters.functions.includes(r.function_name)) {
-        return false
-      }
-      if (filters.locations.length && r.office && !filters.locations.includes(r.office)) {
-        return false
-      }
-      return true
-    })
+    .filter((r) =>
+      employeeMatchesFilters(
+        {
+          function_name: r.function_name,
+          department: r.department,
+          office: r.office,
+          country: r.country,
+          career_level: r.career_level,
+          hire_date: r.hire_date,
+        },
+        filters,
+      ),
+    )
 
   return {
     id: 'detail',
@@ -495,18 +740,32 @@ async function employeeDetailTable(filters: FilterContext): Promise<DetailTable>
       { key: 'career_level', label: 'Level' },
       { key: 'office', label: 'Office' },
     ],
-    rows,
+    rows: rows.map((r) => ({
+      employee_id: r.employee_id,
+      function_name: r.function_name,
+      career_level: r.career_level,
+      office: r.office,
+    })),
   }
 }
 
 export async function getWorkforcePage(
   filters: FilterContext,
 ): Promise<PageVisualBundle> {
-  const base = await getExecutiveOverview(filters)
-  const [span, managerDebt] = await Promise.all([
-    rpcNumber('span_of_control', filters),
-    rpcNumber('manager_debt_count', filters),
+  const f = effectiveFilters(filters)
+  const base = await getExecutiveOverview(f)
+  const [span, managerDebt, voluntary] = await Promise.all([
+    rpcNumber('span_of_control', f),
+    rpcNumber('manager_debt_count', f),
+    rpcNumber('voluntary_attrition_rate', f),
   ])
+
+  const charts: ChartPayload[] = [
+    await compositionByFunctionChart(f),
+    await compositionByLocationChart(f),
+    await compositionByTenureChart(f),
+    await attritionByTypeChart(f),
+  ]
 
   return {
     ...base,
@@ -515,6 +774,15 @@ export async function getWorkforcePage(
       ...base.kpis.filter((k) =>
         ['active_headcount', 'elevated_flight_risk'].includes(k.id),
       ),
+      {
+        id: 'voluntary_attrition_rate',
+        label: 'Voluntary attrition (TTM)',
+        value: voluntary,
+        format: 'rate',
+        delta: null,
+        methodologyId: 'voluntary_attrition_rate',
+        unit: '%',
+      },
       {
         id: 'span_of_control',
         label: 'Span of control',
@@ -532,17 +800,21 @@ export async function getWorkforcePage(
         methodologyId: 'span_of_control',
       },
     ],
+    charts,
+    table: await employeeDetailTable(f),
+    filterEcho: filters,
   }
 }
 
 export async function getAttritionPage(
   filters: FilterContext,
 ): Promise<PageVisualBundle> {
+  const f = effectiveFilters(filters)
   const freshness = await getFreshness()
   const [voluntary, involuntary, regrettable] = await Promise.all([
-    rpcNumber('voluntary_attrition_rate', filters),
-    rpcNumber('involuntary_attrition_count', filters),
-    rpcNumber('regrettable_attrition_count', filters),
+    rpcNumber('voluntary_attrition_rate', f),
+    rpcNumber('involuntary_attrition_count', f),
+    rpcNumber('regrettable_attrition_count', f),
   ])
 
   return {
@@ -574,8 +846,12 @@ export async function getAttritionPage(
         methodologyId: 'regrettable_attrition',
       },
     ],
-    charts: [await attritionByTypeChart(filters)],
-    table: await employeeDetailTable(filters),
+    charts: [
+      await attritionByTypeChart(f),
+      await attritionByReasonChart(f),
+      await compositionByFunctionChart(f),
+    ],
+    table: await employeeDetailTable(f),
     freshness,
     filterEcho: filters,
   }
@@ -584,14 +860,15 @@ export async function getAttritionPage(
 export async function getCompensationPage(
   filters: FilterContext,
 ): Promise<PageVisualBundle> {
+  const f = effectiveFilters(filters)
   const freshness = await getFreshness()
   const [compa, below, market] = await Promise.all([
-    rpcNumber('median_compa_ratio', filters),
-    rpcNumber('compa_below_090_count', filters),
-    rpcNumber('market_position_median', filters),
+    rpcNumber('median_compa_ratio', f),
+    rpcNumber('compa_below_090_count', f),
+    rpcNumber('market_position_median', f),
   ])
 
-  const histogram = await compaHistogram(filters)
+  const histogram = await compaHistogram(f)
 
   return {
     pageId: 'compensation',
@@ -622,7 +899,7 @@ export async function getCompensationPage(
       },
     ],
     charts: [histogram],
-    table: await employeeDetailTable(filters),
+    table: await employeeDetailTable(f),
     freshness,
     filterEcho: filters,
   }
@@ -679,11 +956,12 @@ async function compaHistogram(filters: FilterContext): Promise<ChartPayload> {
 export async function getRecruitingPage(
   filters: FilterContext,
 ): Promise<PageVisualBundle> {
+  const f = effectiveFilters(filters)
   const freshness = await getFreshness()
   const [openReqs, ttf, accept] = await Promise.all([
-    rpcNumber('open_requisitions', filters),
-    rpcNumber('time_to_fill_avg', filters),
-    rpcNumber('first_offer_acceptance_rate', filters),
+    rpcNumber('open_requisitions', f),
+    rpcNumber('time_to_fill_avg', f),
+    rpcNumber('first_offer_acceptance_rate', f),
   ])
 
   return {
@@ -716,7 +994,7 @@ export async function getRecruitingPage(
         unit: '%',
       },
     ],
-    charts: [await funnelChart(filters)],
+    charts: [await funnelChart(f)],
     table: {
       id: 'req_detail',
       title: 'Requisitions',
@@ -726,7 +1004,7 @@ export async function getRecruitingPage(
         { key: 'outcome', label: 'Outcome' },
         { key: 'office', label: 'Office' },
       ],
-      rows: await requisitionRows(filters),
+      rows: await requisitionRows(f),
     },
     freshness,
     filterEcho: filters,
@@ -764,10 +1042,11 @@ async function requisitionRows(
 export async function getEngagementPage(
   filters: FilterContext,
 ): Promise<PageVisualBundle> {
+  const f = effectiveFilters(filters)
   const freshness = await getFreshness()
   const [survey, perEmployee] = await Promise.all([
-    rpcNumber('engagement_survey_mean', filters),
-    rpcNumber('engagement_per_employee_mean', filters),
+    rpcNumber('engagement_survey_mean', f),
+    rpcNumber('engagement_per_employee_mean', f),
   ])
 
   return {
@@ -792,7 +1071,7 @@ export async function getEngagementPage(
         unit: '0–10',
       },
     ],
-    charts: [await engagementByCategoryChart(filters)],
+    charts: [await engagementByCategoryChart(f)],
     table: {
       id: 'oe_themes',
       title: 'Open-ended themes',

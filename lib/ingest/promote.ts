@@ -14,7 +14,9 @@ const NUMERIC_FIELDS = new Set([
   'compa_ratio',
   'range_penetration',
   'number_of_direct_reports',
+  'direct_reports',
   'latest_engagement_score',
+  'engagement_score',
   'equity_grant',
   'merit_percent',
   'score',
@@ -33,6 +35,45 @@ const NUMERIC_FIELDS = new Set([
   'p50',
   'p75',
   'headcount_planned',
+  'tenure_months',
+  'tenure_months_at_exit',
+  'months_since_promotion',
+  'org_events_last_6m',
+  'compa_ratio_at_exit',
+  'fiscal_year',
+  'pct_change',
+  'notice_days',
+  'would_recommend_score',
+  'q01',
+  'q02',
+  'q03',
+  'q04',
+  'q05',
+  'q06',
+  'q07',
+  'q08',
+  'q09',
+  'q10',
+  'q11',
+  'q12',
+  'q13',
+  'q14',
+  'q15',
+  'q16',
+  'q17',
+  'q18',
+  'q19',
+  'q20',
+  'q21',
+  'q22',
+  'q23',
+  'q24',
+  'q25',
+  'q26',
+  'q27',
+  'q28',
+  'q29',
+  'q30',
 ])
 
 const DATE_FIELDS = new Set([
@@ -47,9 +88,19 @@ const DATE_FIELDS = new Set([
   'offer_date',
   'last_promotion_date',
   'vesting_start_date',
+  'as_of_date',
+  'observation_date',
+  'interview_date',
 ])
 
-const BOOL_FIELDS = new Set(['calibration_adjusted', 'first_offer'])
+const BOOL_FIELDS = new Set([
+  'calibration_adjusted',
+  'first_offer',
+  'is_manager',
+])
+
+const CHUNK_SIZE = 100
+const MAX_ATTEMPTS = 4
 
 function coerceRow(row: Record<string, string>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
@@ -74,6 +125,80 @@ function coerceRow(row: Record<string, string>): Record<string, unknown> {
     out[key] = raw
   }
   return out
+}
+
+function errorMessage(error: unknown): string {
+  if (!error) return 'Unknown error'
+  if (error instanceof Error) {
+    const cause =
+      error.cause instanceof Error
+        ? error.cause.message
+        : typeof error.cause === 'string'
+          ? error.cause
+          : null
+    return cause ? `${error.message} (${cause})` : error.message
+  }
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message: unknown }).message)
+  }
+  return String(error)
+}
+
+function isTransient(message: string): boolean {
+  const m = message.toLowerCase()
+  return (
+    m.includes('fetch failed') ||
+    m.includes('network') ||
+    m.includes('timeout') ||
+    m.includes('econnreset') ||
+    m.includes('etimedout') ||
+    m.includes('socket') ||
+    m.includes('503') ||
+    m.includes('502') ||
+    m.includes('429')
+  )
+}
+
+async function withRetry<T>(
+  label: string,
+  run: () => PromiseLike<{
+    data: T | null
+    error: { message: string } | null
+  }>,
+): Promise<T | null> {
+  let lastMessage = 'Unknown error'
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const { data, error } = await run()
+      if (!error) return data
+      lastMessage = error.message
+    } catch (error) {
+      lastMessage = errorMessage(error)
+    }
+
+    if (!isTransient(lastMessage) || attempt === MAX_ATTEMPTS) {
+      throw new Error(`${label}: ${lastMessage}`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400 * attempt))
+  }
+  throw new Error(`${label}: ${lastMessage}`)
+}
+
+async function insertChunks(
+  table: TargetTable,
+  rows: Record<string, unknown>[],
+): Promise<number> {
+  const supabase = getServiceSupabase()
+  let total = 0
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + CHUNK_SIZE)
+    await withRetry(
+      `Promote failed for ${table} (rows ${i + 1}-${i + chunk.length})`,
+      async () => supabase.from(table).insert(chunk),
+    )
+    total += chunk.length
+  }
+  return total
 }
 
 /** Idempotent promote: replace target table contents with mapped rows (ING-13). */
@@ -108,6 +233,13 @@ export async function promoteTables(
     'offers',
     'application_sources',
     'market_benchmarks',
+    // Class 3 — storage only (PRD 3 views later)
+    'employee_snapshots',
+    'termination_history',
+    'engagement_score_history',
+    'engagement_survey_waves',
+    'org_events',
+    'exit_interviews',
   ]
 
   const byKey = new Map(tables.map((t) => [t.datasetKey, t]))
@@ -117,68 +249,94 @@ export async function promoteTables(
     if (!table) continue
 
     const payload = table.rows.map(coerceRow)
-    const chunkSize = 400
-    let total = 0
 
-    // Clear once, then insert in chunks via replace for the first chunk
-    // and insert for subsequent chunks (replace_table_rows clears each call).
-    if (payload.length === 0) {
-      const { error } = await supabase.rpc('replace_table_rows', {
+    // Clear with a tiny RPC first — large replace payloads commonly surface as
+    // undici "fetch failed" against PostgREST.
+    await withRetry(`Promote failed for ${key} (clear)`, async () =>
+      supabase.rpc('replace_table_rows', {
         target_table: key,
         rows: [],
-      })
-      if (error) throw new Error(`Promote failed for ${key}: ${error.message}`)
-    } else {
-      for (let i = 0; i < payload.length; i += chunkSize) {
-        const chunk = payload.slice(i, i + chunkSize)
-        if (i === 0) {
-          const { data, error } = await supabase.rpc('replace_table_rows', {
-            target_table: key,
-            rows: chunk,
-          })
-          if (error) throw new Error(`Promote failed for ${key}: ${error.message}`)
-          total = Number(data ?? chunk.length)
-        } else {
-          const { error } = await supabase.from(key).insert(chunk)
-          if (error) throw new Error(`Promote failed for ${key}: ${error.message}`)
-          total += chunk.length
-        }
+      }),
+    )
+
+    if (key === 'employees') {
+      // Two-pass load so chunked inserts don't violate manager self-FKs.
+      const managers = payload.map((row) => ({
+        employee_id: String(row.employee_id),
+        manager_employee_id:
+          row.manager_employee_id == null ? null : String(row.manager_employee_id),
+      }))
+      const withoutManagers = payload.map((row) => ({
+        ...row,
+        manager_employee_id: null,
+      }))
+      const total = await insertChunks(key, withoutManagers)
+      for (let i = 0; i < managers.length; i += CHUNK_SIZE) {
+        const chunk = managers.slice(i, i + CHUNK_SIZE)
+        await withRetry(
+          `Promote failed for employees (manager links ${i + 1}-${i + chunk.length})`,
+          async () => {
+            const results = await Promise.all(
+              chunk.map((row) =>
+                supabase
+                  .from('employees')
+                  .update({ manager_employee_id: row.manager_employee_id })
+                  .eq('employee_id', row.employee_id),
+              ),
+            )
+            const error = results.find((r) => r.error)?.error ?? null
+            return { data: null, error }
+          },
+        )
       }
+      promoted[key] = total
+      continue
     }
 
-    promoted[key] = total || payload.length
+    promoted[key] = await insertChunks(key, payload)
   }
 
-  await supabase.rpc('refresh_materialized')
+  await withRetry('refresh_materialized', async () =>
+    supabase.rpc('refresh_materialized'),
+  )
 
-  const asOf = await supabase.rpc('reporting_as_of')
+  const asOf = await withRetry<string | null>('reporting_as_of', async () =>
+    supabase.rpc('reporting_as_of'),
+  )
+
   const loadRow = {
     source_type: 'file_adapter',
     file_names: fileNames,
     row_counts: promoted,
     validation_summary: `${validation.issues.length} issue(s); ok=${validation.ok}`,
     loaded_by: process.env.INGEST_ACTOR ?? 'admin',
-    as_of_date: asOf.data ?? null,
+    as_of_date: asOf ?? null,
   }
 
-  const { data: load, error: loadError } = await supabase
-    .from('data_loads')
-    .insert(loadRow)
-    .select('id, loaded_at, source_type, file_names, row_counts, validation_summary, loaded_by')
-    .single()
+  const load = await withRetry<Record<string, unknown>>(
+    'data_loads insert failed',
+    async () =>
+      supabase
+        .from('data_loads')
+        .insert(loadRow)
+        .select(
+          'id, loaded_at, source_type, file_names, row_counts, validation_summary, loaded_by',
+        )
+        .single(),
+  )
 
-  if (loadError || !load) {
-    throw new Error(`data_loads insert failed: ${loadError?.message}`)
+  if (!load) {
+    throw new Error('data_loads insert failed: no row returned')
   }
 
   const record: DataLoadRecord = {
-    id: load.id,
-    loadedAt: load.loaded_at,
-    sourceType: load.source_type,
-    fileNames: load.file_names,
-    rowCounts: load.row_counts as Record<string, number>,
-    validationSummary: load.validation_summary,
-    loadedBy: load.loaded_by,
+    id: String(load.id),
+    loadedAt: String(load.loaded_at),
+    sourceType: String(load.source_type),
+    fileNames: Array.isArray(load.file_names) ? (load.file_names as string[]) : [],
+    rowCounts: (load.row_counts ?? {}) as Record<string, number>,
+    validationSummary: String(load.validation_summary ?? ''),
+    loadedBy: load.loaded_by == null ? null : String(load.loaded_by),
   }
 
   return { load: record, promoted }

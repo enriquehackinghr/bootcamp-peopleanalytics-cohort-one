@@ -94,10 +94,18 @@ export interface KpiTile {
   unit?: string
 }
 
+export interface DataSourceRef {
+  fileName: string
+  loadedAt: string
+  tables: string[]
+}
+
 export interface DataFreshness {
   lastLoadedAt: string | null
   asOfDate: string | null
   sourceSummary: string | null
+  /** Latest upload that contributed each set of tables (newest first). */
+  sources: DataSourceRef[]
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +232,12 @@ export type TargetTable =
   | 'recruiters'
   | 'market_benchmarks'
   | 'competency_framework'
+  | 'employee_snapshots'
+  | 'termination_history'
+  | 'engagement_score_history'
+  | 'engagement_survey_waves'
+  | 'org_events'
+  | 'exit_interviews'
 
 export interface ColumnMapping {
   sourceColumn: string | null
@@ -284,6 +298,11 @@ export interface WizardChartSpec {
   filters: FilterContext
   title: string
   referenceLines?: ReferenceLine[]
+  /** Optional rendered series — when present, shared MetricChart draws them. */
+  points?: ChartSeriesPoint[]
+  seriesKeys?: string[]
+  summary?: string
+  methodologyId?: string
 }
 
 export interface WizardCitation {

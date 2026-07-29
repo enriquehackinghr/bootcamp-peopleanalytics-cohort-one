@@ -22,17 +22,66 @@ export function parseFilterContext(input: unknown): FilterContext {
   }
 }
 
-/** Shape passed into metrics.* SQL functions (jsonb). */
-export function filtersToJson(filters: FilterContext): Record<string, unknown> {
-  return {
-    functions: filters.functions,
-    locations: filters.locations,
-    levelBands: filters.levelBands,
-    tenureBands: filters.tenureBands,
-    period: filters.period,
-    comparison: filters.comparison,
+/**
+ * Fold cross-filter + org drill path into dimension arrays so existing
+ * employee_in_filters RPCs and chart builders honor CAP-3 / CAP-6.
+ */
+export function effectiveFilters(filters: FilterContext): FilterContext {
+  const next: FilterContext = {
+    ...filters,
+    functions: [...filters.functions],
+    locations: [...filters.locations],
+    levelBands: [...filters.levelBands],
+    tenureBands: [...filters.tenureBands],
+    period: { ...filters.period },
     crossFilter: filters.crossFilter,
     drill: filters.drill,
+  }
+
+  if (filters.crossFilter) {
+    const { dimension, value } = filters.crossFilter
+    const dim = dimension.toLowerCase()
+    if (dim === 'function' || dim === 'function_name') {
+      if (!next.functions.includes(value)) next.functions = [...next.functions, value]
+    } else if (
+      dim === 'location' ||
+      dim === 'office' ||
+      dim === 'country' ||
+      dim === 'geography'
+    ) {
+      if (!next.locations.includes(value)) next.locations = [...next.locations, value]
+    } else if (dim === 'level' || dim === 'level_band' || dim === 'career_level') {
+      if (!next.levelBands.includes(value)) next.levelBands = [...next.levelBands, value]
+    } else if (dim === 'tenure' || dim === 'tenure_band') {
+      if (!next.tenureBands.includes(value)) next.tenureBands = [...next.tenureBands, value]
+    }
+  }
+
+  if (filters.drill?.hierarchy === 'org' && filters.drill.path.length) {
+    const [fn, , level] = filters.drill.path
+    if (fn && !next.functions.includes(fn)) next.functions = [...next.functions, fn]
+    if (level && !next.levelBands.includes(level)) {
+      // career_level values may not map 1:1 to IC/Manager/Director+ bands;
+      // still pass through so TS chart filters can match exact levels.
+      next.levelBands = [...next.levelBands, level]
+    }
+  }
+
+  return next
+}
+
+/** Shape passed into metrics.* SQL functions (jsonb). */
+export function filtersToJson(filters: FilterContext): Record<string, unknown> {
+  const f = effectiveFilters(filters)
+  return {
+    functions: f.functions,
+    locations: f.locations,
+    levelBands: f.levelBands,
+    tenureBands: f.tenureBands,
+    period: f.period,
+    comparison: f.comparison,
+    crossFilter: f.crossFilter,
+    drill: f.drill,
   }
 }
 
