@@ -1,16 +1,15 @@
-import { PagePlaceholder } from '@/components/shell/PagePlaceholder'
+import { MetricsPageClient } from '@/components/shell/MetricsPageClient'
 
 export default function EngagementPage() {
   return (
-    <PagePlaceholder
+    <MetricsPageClient
+      endpoint="/api/metrics/engagement"
       title="Engagement"
-      intent="Score by 10 categories with company-mean reference line. Anonymity is structural — engagement_responses has no employee key; aggregate only, min cell size enforced in the view layer."
-      items={[
-        'Score by 10 categories with change vs. Q4 2025',
-        'Cohort cuts — the cohorts furthest below the company mean surfaced',
-        'Drivers',
-        'Open-ended theme frequency (from 886 responses)',
-        'The two engagement instruments are never on a shared axis (MET-2)',
+      sourceTables={[
+        'engagement_responses',
+        'engagement_questions',
+        'engagement_open_ended',
+        'employees',
       ]}
     />
   )

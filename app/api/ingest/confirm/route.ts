@@ -4,6 +4,9 @@ import { fetchMappingLookups, promoteTables } from '@/lib/ingest/promote'
 import { buildPreview, mapRows, validateMappedTables } from '@/lib/ingest/validate'
 import type { ApiErrorBody, TargetTable } from '@/lib/types'
 
+export const runtime = 'nodejs'
+export const maxDuration = 120
+
 interface Override {
   sourceLabel: string
   datasetKey: TargetTable

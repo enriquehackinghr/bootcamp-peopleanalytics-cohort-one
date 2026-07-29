@@ -1,4 +1,6 @@
--- Replace-promote helper for idempotent re-loads (ING-13)
+-- Fix replace_table_rows for Supabase PostgREST / safe-update:
+-- unrestricted DELETE is rejected with "DELETE requires a WHERE clause"
+-- when the function is invoked via RPC.
 
 create or replace function public.replace_table_rows(
   target_table text,
@@ -30,7 +32,6 @@ begin
     raise exception 'Refusing to replace unknown table %', target_table;
   end if;
 
-  -- WHERE true is required: Supabase PostgREST/safe-update rejects DELETE with no predicate.
   execute format('delete from public.%I where true', target_table);
 
   if rows is null or jsonb_array_length(rows) = 0 then
