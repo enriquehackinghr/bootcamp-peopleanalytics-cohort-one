@@ -1095,6 +1095,15 @@ a {
   border-radius: 8px;
 }
 
+.admin-history-item > div {
+  flex: 1 1 40%;
+  min-width: 0;
+}
+
+.admin-history-item .admin-card-title {
+  overflow-wrap: anywhere;
+}
+
 .admin-history-item .admin-meta {
   margin: 0.25rem 0 0;
 }
@@ -1104,7 +1113,9 @@ a {
   font-size: 0.9rem;
   color: var(--ink-muted);
   text-align: right;
-  white-space: nowrap;
+  flex: 1 1 55%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 640px) {
@@ -1112,8 +1123,12 @@ a {
     flex-direction: column;
   }
 
+  .admin-history-item > div,
+  .admin-history-counts {
+    flex: 1 1 auto;
+  }
+
   .admin-history-counts {
     text-align: left;
-    white-space: normal;
   }
 }

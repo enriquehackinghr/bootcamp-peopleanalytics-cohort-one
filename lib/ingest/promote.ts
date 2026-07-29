@@ -244,20 +244,23 @@ export async function promoteTables(
 
   const byKey = new Map(tables.map((t) => [t.datasetKey, t]))
 
-  for (const key of order) {
-    const table = byKey.get(key)
-    if (!table) continue
-
-    const payload = table.rows.map(coerceRow)
-
-    // Clear with a tiny RPC first — large replace payloads commonly surface as
-    // undici "fetch failed" against PostgREST.
+  // Clear children before parents so FK RESTRICT constraints don't block the
+  // parent DELETE (e.g. funnel_events → requisitions).
+  for (const key of [...order].reverse()) {
+    if (!byKey.has(key)) continue
     await withRetry(`Promote failed for ${key} (clear)`, async () =>
       supabase.rpc('replace_table_rows', {
         target_table: key,
         rows: [],
       }),
     )
+  }
+
+  for (const key of order) {
+    const table = byKey.get(key)
+    if (!table) continue
+
+    const payload = table.rows.map(coerceRow)
 
     if (key === 'employees') {
       // Two-pass load so chunked inserts don't violate manager self-FKs.
