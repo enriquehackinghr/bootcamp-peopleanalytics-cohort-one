@@ -56,9 +56,18 @@ export async function runWizardToolQuery(
 
   const wantsAttrition = /attrition|turnover|quit|resign|term/.test(q)
   const wantsComp = /compa|pay|salary|compensation|market/.test(q)
-  const wantsRecruiting = /requisition|recruit|funnel|offer|time to fill|hire/.test(q)
+  const wantsRecruiting =
+    /requisition|recruit|funnel|offer|time to fill|hire|open roles?|open reqs?|headcount plan/.test(
+      q,
+    )
   const wantsEngagement = /engagement|survey|enps|morale/.test(q)
-  const wantsHeadcount = /headcount|how many|workforce|span|manager/.test(q)
+  const wantsHeadcount =
+    /headcount|how many employees|workforce|span|manager debt/.test(q) &&
+    !wantsRecruiting
+  const wantsClass3 =
+    /hazard|survival|risk band|elevated risk|org event|exit driver|advanced|backtest|readiness|bench/.test(
+      q,
+    )
 
   const snapshot: Record<string, number> = {}
   const citations: WizardCitation[] = []
@@ -69,7 +78,28 @@ export async function runWizardToolQuery(
     tables: ['employees'],
   })
 
-  if (wantsAttrition || (!wantsComp && !wantsRecruiting && !wantsEngagement)) {
+  if (wantsClass3) {
+    snapshot.c3_voluntary_attrition_rate = await rpc(
+      'c3_voluntary_attrition_rate',
+      filters,
+    )
+    snapshot.c3_elevated_risk_headcount = await rpc(
+      'c3_elevated_risk_headcount',
+      filters,
+    )
+    citations.push(
+      {
+        measureId: 'c3_voluntary_attrition_rate',
+        tables: ['termination_history', 'employee_snapshots'],
+      },
+      {
+        measureId: 'attrition_risk',
+        tables: ['employee_snapshots', 'engagement_score_history'],
+      },
+    )
+  }
+
+  if (wantsAttrition || (!wantsComp && !wantsRecruiting && !wantsEngagement && !wantsHeadcount && !wantsClass3)) {
     snapshot.voluntary_attrition_rate = await rpc('voluntary_attrition_rate', filters)
     snapshot.involuntary_attrition = await rpc('involuntary_attrition_count', filters)
     snapshot.regrettable_attrition = await rpc('regrettable_attrition_count', filters)
@@ -181,15 +211,21 @@ export async function runWizardToolQuery(
   }
 
   const fallbackAnswer = [
+    snapshot.open_requisitions != null
+      ? `Open requisitions: ${snapshot.open_requisitions}.`
+      : null,
     `Active headcount: ${snapshot.active_headcount ?? 0}.`,
     snapshot.voluntary_attrition_rate != null
       ? `Voluntary attrition (TTM): ${snapshot.voluntary_attrition_rate}%.`
       : null,
-    snapshot.open_requisitions != null
-      ? `Open requisitions: ${snapshot.open_requisitions}.`
+    snapshot.c3_voluntary_attrition_rate != null
+      ? `Class 3 voluntary attrition (TTM, from termination_history): ${snapshot.c3_voluntary_attrition_rate}%.`
       : null,
     snapshot.engagement_survey_mean != null
       ? `Engagement survey mean (1–5): ${snapshot.engagement_survey_mean}. Per-employee mean (0–10): ${snapshot.engagement_per_employee_mean}.`
+      : null,
+    snapshot.median_compa_ratio != null
+      ? `Median compa-ratio: ${snapshot.median_compa_ratio}.`
       : null,
   ]
     .filter(Boolean)

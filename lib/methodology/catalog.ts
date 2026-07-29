@@ -115,4 +115,129 @@ export const METHODOLOGY_FALLBACK: MethodologyEntry[] = [
     sourceTables: ['employees'],
     reconciliationTarget: '42',
   },
+
+  // -------------------------------------------------------------------------
+  // Class 3 — advanced analytics, risk, and talent
+  // -------------------------------------------------------------------------
+  {
+    id: 'tenure_hazard',
+    name: 'Tenure hazard rate',
+    definition:
+      'Discrete-time hazard: exits in tenure month t ÷ employees who survived to the start of month t. Months where the surviving cohort is below the minimum cohort size (10) are withheld.',
+    sourceTables: ['employee_snapshots', 'termination_history'],
+    notes: 'Describes when exit risk concentrates across tenure, not why.',
+  },
+  {
+    id: 'cohort_survival',
+    name: 'Cohort survival curve',
+    definition:
+      'Share of each hire-month cohort still active at N months since hire, computed from the product of (1 − hazard) across prior months. Cohorts below the minimum cohort size (10) are withheld.',
+    sourceTables: ['employee_snapshots', 'termination_history'],
+  },
+  {
+    id: 'attrition_risk',
+    name: 'Attrition risk score',
+    definition:
+      'Weighted composite (risk-v0.2) of tenure stage, compa-ratio band, engagement trend, manager-change recency, promotion gap, and rating trend, scored 0–100 and grouped into low / moderate / elevated / high bands.',
+    sourceTables: [
+      'employee_snapshots',
+      'termination_history',
+      'engagement_score_history',
+      'org_events',
+    ],
+    notes:
+      'An association with historical voluntary exits, not a prediction about any named individual. See risk-v0.2 methodology note for validation status.',
+  },
+  {
+    id: 'risk-v0.2',
+    name: 'Risk model version — risk-v0.2',
+    definition:
+      'Current production version of the attrition risk score. Factor weights and band thresholds are fixed for the version; backtest lift and precision/recall at k are reported alongside every score to show current validation performance.',
+    sourceTables: ['employee_snapshots', 'termination_history'],
+    notes:
+      'Model outputs are decision-support signals for prioritizing human conversations, never an automated basis for an employment action.',
+  },
+  {
+    id: 'manager_effectiveness',
+    name: 'Manager effectiveness',
+    definition:
+      'Composite score combining team voluntary attrition rate, team engagement mean, and span of control for managers with at least the minimum team size (5).',
+    sourceTables: ['employee_snapshots', 'termination_history', 'engagement_score_history'],
+    notes: 'A team-outcome composite, not an individual performance rating.',
+  },
+  {
+    id: 'promotion_readiness',
+    name: 'Promotion readiness',
+    definition:
+      'Latest manager/calibration-asserted readiness band (e.g. Ready now, Ready 1–2 yrs, Not yet) per employee.',
+    sourceTables: ['employee_snapshots'],
+  },
+  {
+    id: 'succession_bench',
+    name: 'Succession bench coverage',
+    definition:
+      'Count of employees flagged "ready now" per critical role or function, expressed as a ratio against a coverage target of 1.',
+    sourceTables: ['employee_snapshots'],
+  },
+  {
+    id: 'exit_themes',
+    name: 'Exit interview themes & drivers',
+    definition:
+      'Primary/secondary driver codes and coded open-text themes from exit_interviews, aggregated at or above the minimum cell size (5).',
+    sourceTables: ['exit_interviews'],
+    notes: 'Reflects only employees who completed an exit interview — not the full leaver population.',
+  },
+  {
+    id: 'regrettable_dual',
+    name: 'Regrettable attrition — dual definition',
+    definition:
+      'Narrow: voluntary terms with talent_designation = Top Talent. Broad: voluntary terms with talent_designation in (Top Talent, Strong Performer) or last_perf_rating in (Exceeded, Significantly Exceeded). Reported side by side, never blended into one number.',
+    sourceTables: ['termination_history'],
+  },
+  {
+    id: 'org_event_attrition',
+    name: 'Attrition around org events',
+    definition:
+      'Exit or retention rate in fixed windows (e.g. −3/+3 months) around a manager change, reorg, or location/work-arrangement change recorded in org_events. Windows below the minimum cell size (5) are withheld.',
+    sourceTables: ['org_events', 'termination_history', 'employee_snapshots'],
+    notes: 'A rate change after the event is associated with the event, not proven to be caused by it.',
+  },
+  {
+    id: 'exit_rate_by_compa_band',
+    name: 'Exit rate by compa-ratio band',
+    definition: 'Voluntary exit rate for employees grouped into compa-ratio bands.',
+    sourceTables: ['employee_snapshots', 'termination_history'],
+  },
+  {
+    id: 'exit_rate_by_engagement_band',
+    name: 'Exit rate by engagement band',
+    definition: 'Voluntary exit rate for employees grouped into engagement-score bands.',
+    sourceTables: ['employee_snapshots', 'engagement_score_history', 'termination_history'],
+  },
+  {
+    id: 'exit_rate_by_mobility_gap',
+    name: 'Exit rate by internal-mobility gap',
+    definition:
+      'Voluntary exit rate for employees grouped by months-since-last-promotion band.',
+    sourceTables: ['employee_snapshots', 'termination_history'],
+  },
+  {
+    id: 'exit_rate_by_tenure_band',
+    name: 'Exit rate by tenure band',
+    definition: 'Voluntary exit rate for employees grouped into tenure bands.',
+    sourceTables: ['employee_snapshots', 'termination_history'],
+  },
+  {
+    id: 'nine_box_migration',
+    name: 'Nine-box migration',
+    definition:
+      'Count of employees moving from one nine-box placement to another between the two most recent calibration cycles.',
+    sourceTables: ['employee_snapshots'],
+  },
+  {
+    id: 'rating_distribution',
+    name: 'Performance rating distribution',
+    definition: 'Headcount by latest performance rating for the filtered population.',
+    sourceTables: ['employee_snapshots'],
+  },
 ]

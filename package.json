@@ -8,6 +8,7 @@
     "start": "next start --hostname 0.0.0.0",
     "preview:build": "npm run build && next start --hostname 0.0.0.0 --port 4173",
     "typecheck": "tsc --noEmit",
+    "test:class3": "npx tsx scripts/class3-smoke.ts",
     "db:migrate": "node scripts/apply-migrations.js"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
+    "tsx": "^4.23.1",
     "typescript": "~5.8.3"
   }
 }

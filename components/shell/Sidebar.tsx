@@ -24,12 +24,21 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/compensation', label: 'Compensation', icon: 'M12 3v18M7 7h7a3 3 0 010 6H10a3 3 0 000 6h8' },
       { href: '/recruiting', label: 'Recruiting', icon: 'M4 5h16M4 12h10M4 19h6M18 15l3 3-3 3M21 18h-7' },
       { href: '/engagement', label: 'Engagement', icon: 'M12 21s-8-5.7-8-12a5 5 0 019-3 5 5 0 019 3c0 6.3-8 12-8 12z' },
+      {
+        href: '/advanced-analytics',
+        label: 'Advanced Analytics',
+        icon: 'M4 19V5m0 14h16M8 15l3-4 3 2 4-6',
+      },
+      {
+        href: '/customized-reports',
+        label: 'Customized Reports',
+        icon: 'M6 4h12v16H6zM9 8h6M9 12h6M9 16h4',
+      },
     ],
   },
   {
     label: 'Explore',
     items: [
-      { href: '/wizard', label: 'Wizard', icon: 'M12 2l2.4 5 5.6.8-4 3.9.9 5.6L12 15l-4.9 2.3.9-5.6L4 7.8 9.6 7z' },
       { href: '/methodology', label: 'Methodology', icon: 'M4 4h16v4H4zM4 12h16v4H4zM4 20h10v0' },
     ],
   },

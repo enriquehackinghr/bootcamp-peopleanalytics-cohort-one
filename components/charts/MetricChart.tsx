@@ -10,9 +10,12 @@ import {
   LineChart,
   ReferenceLine,
   ResponsiveContainer,
+  Scatter,
+  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
+  ZAxis,
 } from 'recharts'
 import { useState } from 'react'
 import type { ChartPayload, DataFreshness } from '@/lib/types'
@@ -164,6 +167,8 @@ export function MetricChart({
     chart.form === 'horizontal_bar' || chart.form === 'stage_bars'
   const stacked = chart.form === 'stacked_bar'
   const isLine = chart.form === 'line'
+  const isScatter = chart.form === 'scatter'
+  const isHeatmap = chart.form === 'heatmap'
   const seriesKeys = chart.seriesKeys?.length
     ? chart.seriesKeys
     : stacked
@@ -182,7 +187,60 @@ export function MetricChart({
       </div>
       <div className="chart-frame" tabIndex={0} aria-label={chart.title}>
         <ResponsiveContainer width="100%" height="100%">
-          {isLine ? (
+          {isScatter ? (
+            <ScatterChart margin={{ top: 12, right: 12, left: 0, bottom: 8 }}>
+              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
+              <XAxis
+                type="number"
+                dataKey="x"
+                name={chart.dimension}
+                tick={{ fill: 'var(--ink-subtle)', fontSize: 11 }}
+              />
+              <YAxis
+                type="number"
+                dataKey="y"
+                name={chart.measure}
+                tick={{ fill: 'var(--ink-subtle)', fontSize: 11 }}
+              />
+              <ZAxis range={[40, 40]} />
+              <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<RichTooltip />} />
+              <Scatter
+                data={chart.points.map((p) => ({
+                  x: Number(p.x),
+                  y: p.y,
+                  name: p.label ?? String(p.x),
+                }))}
+                fill={SERIES[0]}
+              />
+            </ScatterChart>
+          ) : isHeatmap ? (
+            <BarChart
+              data={chart.points.map((p) => ({
+                x: String(p.x),
+                y: p.y,
+                series: p.series ?? 'value',
+              }))}
+              margin={{ top: 12, right: 12, left: 0, bottom: 8 }}
+            >
+              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="x" tick={{ fill: 'var(--ink-subtle)', fontSize: 11 }} />
+              <YAxis tick={{ fill: 'var(--ink-subtle)', fontSize: 11 }} />
+              <Tooltip content={<RichTooltip />} />
+              <Bar dataKey="y" maxBarSize={36}>
+                {chart.points.map((p, index) => {
+                  const max = Math.max(...chart.points.map((pt) => pt.y), 1)
+                  const intensity = p.y / max
+                  return (
+                    <Cell
+                      key={index}
+                      fill={SERIES[0]}
+                      fillOpacity={0.25 + intensity * 0.75}
+                    />
+                  )
+                })}
+              </Bar>
+            </BarChart>
+          ) : isLine ? (
             <LineChart data={rows} margin={{ top: 12, right: 12, left: 0, bottom: 8 }}>
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="x" tick={{ fill: 'var(--ink-subtle)', fontSize: 11 }} />
