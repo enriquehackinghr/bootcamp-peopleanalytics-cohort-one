@@ -457,7 +457,7 @@ export function validateMappedTables(
   }
 }
 
-function primaryKeyFor(dataset: TargetTable): string[] | null {
+export function primaryKeyFor(dataset: TargetTable): string[] | null {
   switch (dataset) {
     case 'employees':
       return ['employee_id']

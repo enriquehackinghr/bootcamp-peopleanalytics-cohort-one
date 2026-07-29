@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server'
 import { FileSourceAdapter, TARGET_TABLES } from '@/lib/ingest/adapter'
 import { fetchMappingLookups, promoteTables } from '@/lib/ingest/promote'
-import { buildPreview, mapRows, validateMappedTables } from '@/lib/ingest/validate'
+import {
+  buildPreview,
+  mapRows,
+  primaryKeyFor,
+  validateMappedTables,
+} from '@/lib/ingest/validate'
 import type { ApiErrorBody, TargetTable } from '@/lib/types'
 
 export const runtime = 'nodejs'
@@ -33,7 +38,10 @@ export async function POST(request: Request) {
     }
 
     const adapter = new FileSourceAdapter()
-    const mapped: { datasetKey: TargetTable; rows: Record<string, string>[] }[] = []
+    const mappedByKey = new Map<
+      TargetTable,
+      { rows: Record<string, string>[]; seen: Set<string> }
+    >()
     const fileNames: string[] = []
 
     for (const file of files) {
@@ -53,12 +61,29 @@ export async function POST(request: Request) {
         if (preview.datasetKey === 'unknown') {
           continue
         }
-        mapped.push({
-          datasetKey: preview.datasetKey,
-          rows: mapRows(table, preview),
-        })
+        const key = preview.datasetKey
+        const bucket = mappedByKey.get(key) ?? { rows: [], seen: new Set<string>() }
+        const pk = primaryKeyFor(key)
+        for (const row of mapRows(table, preview)) {
+          if (pk) {
+            const pkValue = pk.map((c) => row[c] ?? '').join('||')
+            // When a derived-view sheet (e.g. "Currently Open Reqs") repeats keys
+            // already loaded from a master sheet, keep the first occurrence so the
+            // richer row wins and the merge stays idempotent.
+            if (pkValue.replace(/\|/g, '') && bucket.seen.has(pkValue)) continue
+            if (pkValue.replace(/\|/g, '')) bucket.seen.add(pkValue)
+          }
+          bucket.rows.push(row)
+        }
+        mappedByKey.set(key, bucket)
       }
     }
+
+    const mapped: { datasetKey: TargetTable; rows: Record<string, string>[] }[] =
+      [...mappedByKey.entries()].map(([datasetKey, { rows }]) => ({
+        datasetKey,
+        rows,
+      }))
 
     const lookups = await fetchMappingLookups()
     const validation = validateMappedTables(

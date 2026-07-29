@@ -49,17 +49,26 @@ export const REQUIRED_COLUMNS: Record<TargetTable, string[]> = {
 
 const DATASET_HINTS: { key: TargetTable; tokens: string[] }[] = [
   { key: 'employees', tokens: ['employee_id', 'employment_status', 'manager_employee_id'] },
-  { key: 'compensation_events', tokens: ['event_id', 'merit', 'base_salary'] },
-  { key: 'performance_reviews', tokens: ['review_id', 'calibrated_rating', 'review_cycle'] },
+  {
+    key: 'compensation_events',
+    tokens: ['event_id', 'event_type', 'comp_cycle', 'prior_base_salary', 'new_base_salary'],
+  },
+  {
+    key: 'performance_reviews',
+    tokens: ['review_id', 'cycle_fy', 'final_rating', 'nine_box_placement', 'review_status'],
+  },
   { key: 'competency_scores', tokens: ['competency_id', 'score', 'review_id'] },
   { key: 'engagement_responses', tokens: ['response_id', 'survey_period', 'likert'] },
   { key: 'engagement_questions', tokens: ['question_id', 'question_text', 'category'] },
   { key: 'engagement_open_ended', tokens: ['oe_response_id', 'theme', 'open'] },
-  { key: 'requisitions', tokens: ['req_id', 'hiring_manager', 'outcome'] },
+  { key: 'requisitions', tokens: ['req_id', 'hiring_manager_id', 'outcome'] },
   { key: 'funnel_events', tokens: ['stage_order', 'stage_name', 'req_id'] },
   { key: 'offers', tokens: ['offer_id', 'decline_reason'] },
   { key: 'application_sources', tokens: ['application_count', 'source'] },
-  { key: 'recruiters', tokens: ['recruiter_id', 'recruiter_name'] },
+  {
+    key: 'recruiters',
+    tokens: ['recruiter_id', 'recruiter_name', 'first_offer_accept_pct'],
+  },
   { key: 'market_benchmarks', tokens: ['apex_level', 'apex_tier', 'p50'] },
   { key: 'competency_framework', tokens: ['competency_name', 'competency_group'] },
   {
@@ -125,6 +134,12 @@ export function detectDatasetKey(headers: string[]): {
     ['engagement_score_history', 'observation_date'],
     ['exit_interviews', 'interview_id'],
     ['org_events', 'prior_value'],
+    // recruiter_name is unique to the actual recruiters directory — without this,
+    // sheets like "Currently Open Reqs" (which carry recruiter_id but repeat it across
+    // rows) get misclassified as recruiters and fail the primary-key uniqueness check.
+    ['recruiters', 'recruiter_name'],
+    ['compensation_events', 'comp_cycle'],
+    ['performance_reviews', 'cycle_fy'],
   ]
   for (const [key, token] of distinctive) {
     if (set.has(token)) {
