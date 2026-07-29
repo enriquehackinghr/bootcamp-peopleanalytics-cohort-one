@@ -1132,3 +1132,243 @@ a {
     text-align: left;
   }
 }
+
+/* ---------- Class 3 advanced analytics + floating wizard ---------- */
+.page-header {
+  margin-bottom: 1.25rem;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 1.85rem;
+  margin: 0.15rem 0 0.35rem;
+}
+
+.aa-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.aa-subnav a {
+  color: var(--ink-muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.aa-subnav a:hover {
+  color: var(--ink);
+}
+
+.aa-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 1rem 0 1.25rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.aa-tab {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-muted);
+  border-radius: 8px;
+  padding: 0.45rem 0.7rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.aa-tab:hover {
+  color: var(--ink);
+  background: var(--plane);
+}
+
+.aa-tab--active,
+.aa-tab[aria-selected='true'] {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--s1) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--s1) 35%, var(--border));
+  font-weight: 600;
+}
+
+.aa-tab-panel {
+  min-height: 12rem;
+}
+
+.aa-section {
+  margin: 1.75rem 0;
+  scroll-margin-top: 5rem;
+}
+
+.aa-section-title {
+  font-size: 1.15rem;
+  margin: 0 0 0.85rem;
+}
+
+.aa-caveat {
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+  margin: 0.5rem 0;
+}
+
+.guidance-grid,
+.reports-list {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem 1rem;
+  margin: 0;
+}
+
+.profile-grid dt {
+  font-size: 0.75rem;
+  color: var(--ink-subtle);
+}
+
+.profile-grid dd {
+  margin: 0.15rem 0 0;
+}
+
+.risk-breakdown .detail-table,
+.methodology-panel .detail-table,
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.detail-table th,
+.detail-table td {
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  padding: 0.45rem 0.35rem;
+}
+
+.wizard-fab {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 40;
+  border: none;
+  border-radius: 999px;
+  padding: 0.85rem 1.2rem;
+  background: var(--s1);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: var(--shadow-elevated);
+  cursor: pointer;
+}
+
+.wizard-panel {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 50;
+  width: min(400px, calc(100vw - 2rem));
+  max-height: min(70vh, 640px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-elevated);
+}
+
+.wizard-panel--expanded {
+  width: min(720px, calc(100vw - 2rem));
+  max-height: min(88vh, 860px);
+}
+
+.wizard-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.wizard-panel-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.wizard-panel-actions button,
+.wizard-confirm-actions button,
+.wizard-input-row button,
+.text-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--ink);
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.wizard-context,
+.wizard-citations {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  color: var(--ink-subtle);
+}
+
+.wizard-messages {
+  flex: 1;
+  overflow: auto;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.wizard-msg {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: var(--plane);
+  font-size: 0.92rem;
+}
+
+.wizard-msg--user {
+  background: color-mix(in srgb, var(--s1) 12%, var(--surface));
+}
+
+.wizard-confirm {
+  padding: 0.5rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.wizard-confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.wizard-input-row {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.wizard-input-row input {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  background: var(--plane);
+  color: var(--ink);
+  font: inherit;
+}

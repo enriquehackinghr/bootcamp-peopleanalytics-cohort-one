@@ -6,6 +6,7 @@ import { FilterProvider } from '@/components/shell/FilterProvider'
 import { Sidebar } from '@/components/shell/Sidebar'
 import { Topbar } from '@/components/shell/Topbar'
 import { FilterBar } from '@/components/shell/FilterBar'
+import { FloatingWizard } from '@/components/shell/FloatingWizard'
 
 function ShellChrome({ children }: { children: ReactNode }) {
   return (
@@ -16,6 +17,9 @@ function ShellChrome({ children }: { children: ReactNode }) {
         <FilterBar />
         {children}
       </main>
+      <Suspense fallback={null}>
+        <FloatingWizard />
+      </Suspense>
     </div>
   )
 }
