@@ -14,8 +14,8 @@ import {
 } from '@/lib/types'
 import {
   buildWizardReportSpec,
-  findLastChartInConversation,
-  pickRenderableChart,
+  findLastChartsInConversation,
+  pickRenderableCharts,
 } from '@/lib/wizard/reportSpec'
 
 function pageLabel(pathname: string): string {
@@ -105,12 +105,16 @@ export function FloatingWizard() {
         })
         const data = (await res.json()) as WizardResponse
         setLast(data)
+        const charts =
+          data.charts?.filter((c) => c.points?.length) ??
+          (data.chart?.points?.length ? [data.chart] : [])
         setConversation((prev) => [
           ...prev,
           {
             role: 'assistant',
             content: data.answer,
-            chart: data.chart,
+            chart: charts[0] ?? null,
+            charts,
             measures: data.citations.map((c) => c.measureId),
           },
         ])
@@ -158,15 +162,17 @@ export function FloatingWizard() {
       const payloadSpec = (action.payload.spec ?? last?.reportSpec ?? {}) as Partial<
         CustomizedReportSpec
       >
-      const chart = pickRenderableChart(
-        last?.chart,
-        findLastChartInConversation(conversation),
+      const charts = pickRenderableCharts(
+        last?.charts?.length ?
+          last.charts
+        : last?.chart ? [last.chart] : [],
+        findLastChartsInConversation(conversation),
       )
       const fromChart = buildWizardReportSpec({
         question: payloadSpec.description || last?.answer || 'Wizard report',
-        chart,
+        charts,
         citations: last?.citations,
-        filters,
+        filters: charts[0]?.filters ?? filters,
       })
       const spec: Partial<CustomizedReportSpec> = {
         ...fromChart,
@@ -183,6 +189,7 @@ export function FloatingWizard() {
             payloadSpec.dimensions
           : fromChart.dimensions,
         title: payloadSpec.title || fromChart.title,
+        filters: fromChart.filters ?? payloadSpec.filters ?? filters,
       }
 
       const res = await fetch('/api/reports', {
@@ -272,22 +279,25 @@ export function FloatingWizard() {
         {conversation.map((turn, i) => (
           <div key={i} className={`wizard-msg wizard-msg--${turn.role}`}>
             <p>{turn.content}</p>
-            {turn.chart?.points?.length ? (
-              <MetricChart
-                chart={{
-                  id: `wiz-${i}`,
-                  title: turn.chart.title,
-                  form: turn.chart.form,
-                  dimension: turn.chart.dimension,
-                  measure: turn.chart.measure,
-                  points: turn.chart.points,
-                  seriesKeys: turn.chart.seriesKeys,
-                  referenceLines: turn.chart.referenceLines,
-                  summary: turn.chart.summary ?? '',
-                  methodologyId: turn.chart.methodologyId,
-                }}
-              />
-            ) : null}
+            {(turn.charts?.length ? turn.charts : turn.chart ? [turn.chart] : [])
+              .filter((c) => c.points?.length)
+              .map((chart, ci) => (
+                <MetricChart
+                  key={`${i}-${ci}`}
+                  chart={{
+                    id: `wiz-${i}-${ci}`,
+                    title: chart.title,
+                    form: chart.form,
+                    dimension: chart.dimension,
+                    measure: chart.measure,
+                    points: chart.points ?? [],
+                    seriesKeys: chart.seriesKeys,
+                    referenceLines: chart.referenceLines,
+                    summary: chart.summary ?? '',
+                    methodologyId: chart.methodologyId,
+                  }}
+                />
+              ))}
           </div>
         ))}
         {loading ? <p className="wizard-msg wizard-msg--assistant">Thinking…</p> : null}

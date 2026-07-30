@@ -23,7 +23,6 @@ const APPROVED_MEASURES = new Set([
   'median_compa_ratio',
 ])
 
-/** Prefer a chart that already has renderable points. */
 export function pickRenderableChart(
   primary: WizardChartSpec | null | undefined,
   fallback: WizardChartSpec | null | undefined,
@@ -33,65 +32,94 @@ export function pickRenderableChart(
   return primary ?? fallback ?? null
 }
 
+export function pickRenderableCharts(
+  primary: WizardChartSpec[],
+  fallback: WizardChartSpec[],
+): WizardChartSpec[] {
+  const fromPrimary = primary.filter((c) => c.points?.length)
+  if (fromPrimary.length) return fromPrimary
+  return fallback.filter((c) => c.points?.length)
+}
+
 export function findLastChartInConversation(
   conversation: WizardConversationTurn[] | undefined,
 ): WizardChartSpec | null {
-  if (!conversation?.length) return null
+  return findLastChartsInConversation(conversation)[0] ?? null
+}
+
+export function findLastChartsInConversation(
+  conversation: WizardConversationTurn[] | undefined,
+): WizardChartSpec[] {
+  if (!conversation?.length) return []
   for (let i = conversation.length - 1; i >= 0; i -= 1) {
-    const chart = conversation[i]?.chart
-    if (chart?.points?.length) return chart
+    const turn = conversation[i]
+    const charts = [
+      ...(turn?.charts ?? []),
+      ...(turn?.chart ? [turn.chart] : []),
+    ].filter((c) => c.points?.length)
+    if (charts.length) return charts
   }
-  return null
+  return []
 }
 
 function approvedMeasures(
-  chart: WizardChartSpec | null,
+  charts: WizardChartSpec[],
   citations: WizardCitation[] | undefined,
 ): string[] {
   const candidates = [
     ...(citations?.map((c) => c.measureId) ?? []),
-    chart?.methodologyId,
-    chart?.measure,
+    ...charts.flatMap((c) => [c.methodologyId, c.measure]),
   ].filter((m): m is string => Boolean(m))
 
   const approved = [...new Set(candidates)].filter((m) => APPROVED_MEASURES.has(m))
   if (approved.length) return approved
-  return ['voluntary_attrition_rate']
+  return ['active_headcount']
 }
 
-/** Build a saveable customized-report partial from the wizard chart the user just saw. */
+/** Build a saveable customized-report partial from wizard chart(s). */
 export function buildWizardReportSpec(opts: {
   question: string
-  chart: WizardChartSpec | null | undefined
+  chart?: WizardChartSpec | null | undefined
+  charts?: WizardChartSpec[]
   citations?: WizardCitation[]
   filters?: FilterContext | null
 }): Partial<CustomizedReportSpec> {
-  const chart = opts.chart ?? null
-  const filters = chart?.filters ?? opts.filters ?? EMPTY_FILTER_CONTEXT
-  const visuals =
-    chart?.points?.length
-      ? [
-          {
-            id: `wiz-visual-${Date.now()}`,
-            title: chart.title || 'Wizard chart',
-            chart,
-            annotations: chart.summary ? [chart.summary] : [],
-          },
-        ]
-      : []
+  const charts = (
+    opts.charts?.length ? opts.charts : opts.chart ? [opts.chart] : []
+  ).filter((c) => c.points?.length)
+  const primary = charts[0] ?? null
+  const filters = primary?.filters ?? opts.filters ?? EMPTY_FILTER_CONTEXT
+  const visuals = charts.map((chart, i) => ({
+    id: `wiz-visual-${Date.now()}-${i}`,
+    title: chart.title || `Wizard chart ${i + 1}`,
+    chart,
+    annotations: chart.summary ? [chart.summary] : [],
+  }))
+
+  const scope = filters.functions[0]
+  const title =
+    visuals.length > 1
+      ? scope
+        ? `${scope} composition report`
+        : 'Workforce composition report'
+      : primary?.title || 'Wizard report'
 
   return {
-    title: chart?.title || 'Wizard report',
+    title,
     description: opts.question.slice(0, 240),
-    measures: approvedMeasures(chart, opts.citations),
-    dimensions: chart?.dimension ? [chart.dimension] : [],
+    measures: approvedMeasures(charts, opts.citations),
+    dimensions: [...new Set(charts.map((c) => c.dimension).filter(Boolean))],
     filters,
     period: filters.period,
     comparison_mode: filters.comparison,
     visuals,
     tables: [],
-    annotations: chart?.summary ? [chart.summary] : [],
-    methodology_links: chart?.methodologyId ? [chart.methodologyId] : [],
+    annotations: charts.map((c) => c.summary).filter((s): s is string => Boolean(s)),
+    methodology_links: [
+      ...new Set(
+        charts.map((c) => c.methodologyId).filter((id): id is string => Boolean(id)),
+      ),
+    ],
     report_type: 'chart',
     created_via_wizard: true,
     status: 'active',

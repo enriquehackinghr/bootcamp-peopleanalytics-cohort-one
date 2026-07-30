@@ -11,10 +11,13 @@ import type {
 import { buildWizardSystemPrompt } from '@/lib/wizard/prompt'
 import {
   buildWizardReportSpec,
-  findLastChartInConversation,
-  pickRenderableChart,
+  findLastChartsInConversation,
+  pickRenderableCharts,
 } from '@/lib/wizard/reportSpec'
-import { runWizardToolQuery } from '@/lib/wizard/tools'
+import {
+  guardFunctionHeadcountAnswer,
+  runWizardToolQuery,
+} from '@/lib/wizard/tools'
 
 const REFUSAL_PATTERNS: { pattern: RegExp; reason: string; alternative: string }[] = [
   {
@@ -81,7 +84,7 @@ function proposedActionsFor(
           ({
             title: 'Wizard report',
             description: question.slice(0, 160),
-            measures: ['voluntary_attrition_rate'],
+            measures: ['active_headcount'],
             report_type: 'chart',
             created_via_wizard: true,
             visuals: [],
@@ -122,24 +125,27 @@ function withReportArtifacts(
   },
   opts: {
     question: string
-    chart: WizardChartSpec | null
+    charts: WizardChartSpec[]
     citations: WizardCitation[]
     filters: FilterContext
     context?: Partial<DashboardContext> | null
   },
 ): WizardResponse {
   const wantsReport = /save.*(report|chart)|customized report/i.test(opts.question)
+  const chart = opts.charts[0] ?? null
   const reportSpec = wantsReport
     ? buildWizardReportSpec({
         question: opts.question,
-        chart: opts.chart,
+        charts: opts.charts,
+        chart,
         citations: opts.citations,
         filters: opts.filters,
       })
     : null
   return {
     ...base,
-    chart: opts.chart,
+    chart,
+    charts: opts.charts,
     reportSpec,
     proposedActions: proposedActionsFor(opts.question, opts.context, reportSpec),
   }
@@ -148,17 +154,19 @@ function withReportArtifacts(
 function finalizeAnswer(
   llmAnswer: string | undefined,
   fallbackAnswer: string,
+  preferAuthoritative: boolean,
 ): string {
+  if (preferAuthoritative) return fallbackAnswer
   const text = (llmAnswer || '').trim()
   if (!text) return fallbackAnswer
   if (INCOMPLETE_ANSWER.test(text) && !/\d/.test(text)) return fallbackAnswer
-  // Prefer tool numbers when the model hedges or contradicts the snapshot prose.
   if (INCOMPLETE_ANSWER.test(text)) {
     return `${fallbackAnswer} ${text.replace(INCOMPLETE_ANSWER, '').trim()}`.trim()
   }
-  // If the model omitted the grounded snapshot entirely, prepend it.
-  if (fallbackAnswer && !text.includes(String(fallbackAnswer.match(/\d+(\.\d+)?/)?.[0] ?? '__none__'))) {
-    // Still accept LLM prose when it cites at least one digit from the snapshot.
+  if (
+    fallbackAnswer &&
+    !text.includes(String(fallbackAnswer.match(/\d+(\.\d+)?/)?.[0] ?? '__none__'))
+  ) {
     const snapshotNums = [...fallbackAnswer.matchAll(/\d+(\.\d+)?/g)].map((m) => m[0])
     const citesSnapshot = snapshotNums.some((n) => text.includes(n))
     if (!citesSnapshot && snapshotNums.length) {
@@ -175,6 +183,7 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
       answer: 'Ask a workforce question grounded in the Meridian metrics model.',
       citations: [],
       chart: null,
+      charts: [],
       filterOverridden: false,
       refused: false,
       refusalReason: null,
@@ -188,6 +197,7 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
         answer: rule.alternative,
         citations: [],
         chart: null,
+        charts: [],
         filterOverridden: false,
         refused: true,
         refusalReason: rule.reason,
@@ -203,10 +213,8 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
     }
   }
 
-  const filterOverridden = /ignore filters|across the company|company-wide/i.test(
-    question,
-  )
-  const effectiveFilters: FilterContext = filterOverridden
+  const companyWide = /ignore filters|across the company|company-wide/i.test(question)
+  const baseFilters: FilterContext = companyWide
     ? {
         ...request.filters,
         functions: [],
@@ -217,32 +225,43 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
       }
     : request.filters
 
-  const toolResult = await runWizardToolQuery(question, effectiveFilters)
-  const chartFromHistory = findLastChartInConversation(request.conversation)
+  const toolResult = await runWizardToolQuery(question, baseFilters)
+  const historyCharts = findLastChartsInConversation(request.conversation)
   const wantsReport = /save.*(report|chart)|customized report/i.test(question)
-  // On save, keep the chart the user already saw in chat; otherwise prefer fresh tool output.
-  const groundedChart = wantsReport
-    ? pickRenderableChart(chartFromHistory, toolResult.chart)
-    : pickRenderableChart(toolResult.chart, chartFromHistory)
+  const toolCharts = toolResult.charts.filter((c) => c.points?.length)
+  const groundedCharts = wantsReport && !toolCharts.length
+    ? pickRenderableCharts(historyCharts, toolCharts)
+    : pickRenderableCharts(toolCharts, historyCharts)
+
+  const scopedFromQuestion = Boolean(toolResult.snapshot.function_scope)
+  const filterOverridden =
+    companyWide ||
+    (scopedFromQuestion &&
+      !(request.filters.functions ?? []).includes(
+        String(toolResult.snapshot.function_scope),
+      ))
 
   const groundedBase = {
     answer: toolResult.fallbackAnswer,
     citations: toolResult.citations,
-    chart: groundedChart,
+    chart: groundedCharts[0] ?? null,
+    charts: groundedCharts,
     filterOverridden,
     refused: false,
     refusalReason: null,
   }
 
+  const artifactOpts = {
+    question,
+    charts: groundedCharts,
+    citations: toolResult.citations,
+    filters: toolResult.effectiveFilters,
+    context: request.context,
+  }
+
   const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) {
-    return withReportArtifacts(groundedBase, {
-      question,
-      chart: groundedChart,
-      citations: toolResult.citations,
-      filters: effectiveFilters,
-      context: request.context,
-    })
+  if (!apiKey || toolResult.preferAuthoritative) {
+    return withReportArtifacts(groundedBase, artifactOpts)
   }
 
   const system = buildWizardSystemPrompt()
@@ -263,7 +282,7 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
           role: 'user',
           content: JSON.stringify({
             question,
-            filters: effectiveFilters,
+            filters: toolResult.effectiveFilters,
             filterOverridden,
             dashboardContext: request.context ?? null,
             conversation: request.conversation ?? [],
@@ -272,8 +291,9 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
             instructions: [
               'Return a COMPLETE final answer now — never say you will look something up or do it later.',
               'Use ONLY numbers from measureSnapshot / authoritativeAnswer. Do not invent or round differently.',
+              'If function_scope is set, scoped_active_headcount is that function’s headcount; company_active_headcount is company-wide — never confuse them.',
               'If the question asks for open roles/requisitions, use open_requisitions exactly.',
-              'If a chart helps, return chartSpec matching WizardChartSpec; otherwise null.',
+              'Do not invent chart points; leave chart null — the server attaches grounded charts.',
             ].join(' '),
           }),
         },
@@ -285,13 +305,7 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
   if (!completion.ok) {
     const text = await completion.text()
     console.error('OpenAI error', text)
-    return withReportArtifacts(groundedBase, {
-      question,
-      chart: groundedChart,
-      citations: toolResult.citations,
-      filters: effectiveFilters,
-      context: request.context,
-    })
+    return withReportArtifacts(groundedBase, artifactOpts)
   }
 
   const payload = (await completion.json()) as {
@@ -300,7 +314,6 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
   const content = payload.choices?.[0]?.message?.content ?? '{}'
   let parsed: {
     answer?: string
-    chart?: WizardResponse['chart']
     refused?: boolean
     refusalReason?: string | null
   }
@@ -310,26 +323,27 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
     parsed = { answer: toolResult.fallbackAnswer }
   }
 
-  const chart = pickRenderableChart(
-    pickRenderableChart(parsed.chart, toolResult.chart),
-    chartFromHistory,
+  const rawAnswer = finalizeAnswer(
+    parsed.answer,
+    toolResult.fallbackAnswer,
+    toolResult.preferAuthoritative,
+  )
+  const answer = guardFunctionHeadcountAnswer(
+    rawAnswer,
+    toolResult.snapshot,
+    toolResult.fallbackAnswer,
   )
 
   return withReportArtifacts(
     {
-      answer: finalizeAnswer(parsed.answer, toolResult.fallbackAnswer),
+      answer,
       citations: toolResult.citations,
-      chart,
+      chart: groundedCharts[0] ?? null,
+      charts: groundedCharts,
       filterOverridden,
       refused: Boolean(parsed.refused),
       refusalReason: parsed.refusalReason ?? null,
     },
-    {
-      question,
-      chart,
-      citations: toolResult.citations,
-      filters: effectiveFilters,
-      context: request.context,
-    },
+    artifactOpts,
   )
 }

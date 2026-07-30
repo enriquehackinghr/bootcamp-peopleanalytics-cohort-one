@@ -478,6 +478,7 @@ export interface WizardConversationTurn {
   content: string
   measures?: string[]
   chart?: WizardChartSpec | null
+  charts?: WizardChartSpec[]
 }
 
 export interface WizardRequest {
@@ -492,6 +493,8 @@ export interface WizardResponse {
   answer: string
   citations: WizardCitation[]
   chart: WizardChartSpec | null
+  /** When the wizard builds several composition cuts (level / geo / age). */
+  charts?: WizardChartSpec[]
   filterOverridden: boolean
   refused: boolean
   refusalReason: string | null
