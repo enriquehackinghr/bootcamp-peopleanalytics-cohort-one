@@ -21,9 +21,9 @@ Rules:
 - Market position joins through level_map and pay_zone_map; convert salary to USD via fx_rates before aggregating raw pay.
 - Return a COMPLETE final answer in one response. Never say "I will look that up", "I will do this now", or promise a later answer.
 - Every number in your answer MUST come from measureSnapshot / authoritativeAnswer. Do not invent, estimate, or round differently.
-- Return JSON: { "answer": string, "chart": WizardChartSpec | null, "refused": boolean, "refusalReason": string | null }
-- WizardChartSpec: { form, dimension, measure, series?, filters, title, referenceLines? }
-- Do not emit chart rendering code. Charts are drawn by the shared component library.
+- If measureSnapshot.function_scope is set, scoped_active_headcount (or active_headcount) is THAT function’s headcount. company_active_headcount is company-wide. Never say a function’s headcount equals company_active_headcount unless those two numbers are identical.
+- Return JSON: { "answer": string, "chart": null, "refused": boolean, "refusalReason": string | null }
+- Do not emit chart rendering code or invent chart points. Charts are attached server-side from grounded queries.
 
 Declared hierarchies:
 ${hierarchyBlock}
