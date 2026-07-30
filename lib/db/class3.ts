@@ -1343,7 +1343,10 @@ export async function getManagerDetail(
   }
 }
 
-export async function getEmployee360(employeeId: string): Promise<Employee360Response> {
+export async function getEmployee360(
+  employeeId: string,
+  ctx?: { fieldPermissions?: { equity?: boolean; succession?: boolean; demographics?: boolean; compensation?: boolean } } | null,
+): Promise<Employee360Response> {
   const freshness = await getFreshness()
 
   const emptyResult = (note: string): Employee360Response => ({
@@ -1359,57 +1362,200 @@ export async function getEmployee360(employeeId: string): Promise<Employee360Res
 
   if (!hasDatabaseConfig()) return emptyResult('Database not configured.')
 
-  const result = await rpcJson<RpcRow>('c3_employee_360', { employee_id: employeeId }, {})
+  // PostgREST expects the SQL parameter name p_employee_id.
+  const result = await rpcJson<RpcRow>(
+    'c3_employee_360',
+    { p_employee_id: employeeId },
+    {},
+  )
+
   const profileRaw =
-    result.profile && typeof result.profile === 'object' ? (result.profile as RpcRow) : null
+    (result.profile && typeof result.profile === 'object'
+      ? (result.profile as RpcRow)
+      : null) ||
+    (result.snapshot && typeof result.snapshot === 'object'
+      ? (result.snapshot as RpcRow)
+      : null)
+
   if (!profileRaw || Object.keys(profileRaw).length === 0) {
-    return emptyResult('c3_employee_360 returned no profile for this employee ID.')
+    // Fallback: read current employee directory row when RPC shape/data is missing.
+    const supabase = getServiceSupabase()
+    const { data: emp } = await supabase
+      .from('employees')
+      .select(
+        'employee_id, first_name, last_name, function_name, department, career_level, office, employment_status, hire_date, manager_employee_id, job_family, base_salary, currency_code, compa_ratio, range_penetration, talent_designation, latest_engagement_score',
+      )
+      .eq('employee_id', employeeId)
+      .maybeSingle()
+    if (!emp) {
+      return emptyResult('No employee record found for this ID.')
+    }
+    const profile: Record<string, string | number | null> = {
+      employee_id: emp.employee_id,
+      name: [emp.first_name, emp.last_name].filter(Boolean).join(' '),
+      function_name: emp.function_name,
+      department: emp.department,
+      career_level: emp.career_level,
+      office: emp.office,
+      employment_status: emp.employment_status,
+      hire_date: emp.hire_date,
+      manager_employee_id: emp.manager_employee_id,
+      job_family: emp.job_family,
+    }
+    if (ctx?.fieldPermissions?.compensation !== false) {
+      profile.base_salary = emp.base_salary
+      profile.currency_code = emp.currency_code
+      profile.compa_ratio = emp.compa_ratio
+      profile.range_penetration = emp.range_penetration
+    }
+    profile.talent_designation = emp.talent_designation
+    profile.latest_engagement_score = emp.latest_engagement_score
+    return {
+      employeeId,
+      profile,
+      modules: [],
+      risk: null,
+      charts: [],
+      freshness,
+      responsibleUseNote: RESPONSIBLE_USE_NOTE,
+      dataSufficiencyNote: 'Directory fallback — Class 3 snapshot modules unavailable.',
+    }
   }
 
-  // Explicitly pass through only what the RPC returns — the SQL layer never
-  // selects gender or race for this surface, and neither does this mapping.
+  // Strip demographics always from this surface mapping (channel + matrix).
+  const demokeys = new Set([
+    'gender',
+    'race_ethnicity',
+    'date_of_birth',
+    'age',
+    'veteran_status',
+    'disability_self_id',
+  ])
   const profile: Record<string, string | number | null> = {}
   for (const [key, value] of Object.entries(profileRaw)) {
+    if (demokeys.has(key)) continue
+    if (ctx?.fieldPermissions?.compensation === false && /salary|compa|bonus|ote|equity/i.test(key))
+      continue
     if (typeof value === 'number' || typeof value === 'string') profile[key] = value
     else profile[key] = value === null || value === undefined ? null : String(value)
   }
 
+  // Prefer RPC modules when present; otherwise derive from recent_* arrays.
+  let modules: Employee360Response['modules'] = []
   const modulesRaw = Array.isArray(result.modules) ? (result.modules as RpcRow[]) : []
-  const modules = modulesRaw.map((mod) => {
-    const columnsRaw = Array.isArray(mod.columns) ? (mod.columns as RpcRow[]) : []
-    const rowsRaw = Array.isArray(mod.rows) ? (mod.rows as RpcRow[]) : []
-    const columns: DetailTable['columns'] = columnsRaw.map((c) => ({
-      key: strOrNull(pick(c, ['key'])) ?? '',
-      label: strOrNull(pick(c, ['label'])) ?? '',
-    }))
-    const rows: DetailTable['rows'] = rowsRaw.map((r) => {
-      const row: Record<string, string | number | null> = {}
-      for (const col of columns) {
-        const value = r[col.key]
-        row[col.key] = typeof value === 'number' || typeof value === 'string' ? value : value == null ? null : String(value)
-      }
-      return row
+  if (modulesRaw.length > 0) {
+    modules = modulesRaw.map((mod) => {
+      const columnsRaw = Array.isArray(mod.columns) ? (mod.columns as RpcRow[]) : []
+      const rowsRaw = Array.isArray(mod.rows) ? (mod.rows as RpcRow[]) : []
+      const columns: DetailTable['columns'] = columnsRaw.map((c) => ({
+        key: strOrNull(pick(c, ['key'])) ?? '',
+        label: strOrNull(pick(c, ['label'])) ?? '',
+      }))
+      const rows: DetailTable['rows'] = rowsRaw.map((r) => {
+        const row: Record<string, string | number | null> = {}
+        for (const col of columns) {
+          const value = r[col.key]
+          row[col.key] =
+            typeof value === 'number' || typeof value === 'string'
+              ? value
+              : value == null
+                ? null
+                : String(value)
+        }
+        return row
+      })
+      const id = strOrNull(pick(mod, ['id'])) ?? 'module'
+      const title = strOrNull(pick(mod, ['title'])) ?? 'Module'
+      return { id, title, rows: { id, title, columns, rows } }
     })
-    const id = strOrNull(pick(mod, ['id'])) ?? 'module'
-    const title = strOrNull(pick(mod, ['title'])) ?? 'Module'
-    return { id, title, rows: { id, title, columns, rows } }
-  })
+  } else {
+    const recentPairs: Array<{ id: string; title: string; key: string }> = [
+      { id: 'engagement', title: 'Engagement history (0–10)', key: 'recent_engagement' },
+      { id: 'performance', title: 'Performance reviews', key: 'recent_performance_reviews' },
+      { id: 'compensation', title: 'Compensation events', key: 'recent_compensation_events' },
+      { id: 'org', title: 'Organizational events', key: 'recent_org_events' },
+    ]
+    for (const spec of recentPairs) {
+      if (spec.id === 'compensation' && ctx?.fieldPermissions?.compensation === false) continue
+      const arr = Array.isArray(result[spec.key]) ? (result[spec.key] as RpcRow[]) : []
+      if (arr.length === 0) {
+        modules.push({
+          id: spec.id,
+          title: spec.title,
+          rows: {
+            id: spec.id,
+            title: spec.title,
+            columns: [{ key: 'note', label: 'Note' }],
+            rows: [{ note: `No ${spec.title.toLowerCase()} recorded` }],
+          },
+        })
+        continue
+      }
+      const keys = Object.keys(arr[0] ?? {})
+      const columns = keys.map((k) => ({ key: k, label: k }))
+      const rows = arr.map((r) => {
+        const row: Record<string, string | number | null> = {}
+        for (const k of keys) {
+          const value = r[k]
+          row[k] =
+            typeof value === 'number' || typeof value === 'string'
+              ? value
+              : value == null
+                ? null
+                : String(value)
+        }
+        return row
+      })
+      modules.push({ id: spec.id, title: spec.title, rows: { id: spec.id, title: spec.title, columns, rows } })
+    }
+  }
 
-  const riskRaw = result.risk && typeof result.risk === 'object' ? (result.risk as RpcRow) : null
+  const riskRaw =
+    (result.risk && typeof result.risk === 'object' ? (result.risk as RpcRow) : null) ||
+    (result.risk_score && typeof result.risk_score === 'object'
+      ? (result.risk_score as RpcRow)
+      : null)
   const risk = riskRaw ? buildRiskScore(riskRaw) : null
+
+  // Engagement chart from 0–10 instrument only (never survey waves).
+  const engagementRows = Array.isArray(result.recent_engagement)
+    ? (result.recent_engagement as RpcRow[])
+    : []
+  const charts: ChartPayload[] = []
+  if (engagementRows.length >= 3) {
+    charts.push({
+      id: 'employee_engagement_0_10',
+      title: 'Individual engagement score (0–10 scale)',
+      form: 'line',
+      dimension: 'observation_date',
+      measure: 'engagement_score',
+      points: engagementRows
+        .slice()
+        .reverse()
+        .map((r) => ({
+          x: String(r.observation_date ?? ''),
+          y: Number(r.engagement_score) || 0,
+        })),
+      unit: '0–10',
+      methodologyId: 'engagement_individual',
+      summary: `Engagement history on the individual 0–10 instrument (${engagementRows.length} observations).`,
+    })
+  }
 
   const dataSufficiencyNote = risk
     ? `Retention-risk indicator data sufficiency: ${risk.data_sufficiency}. Available factors ${risk.available_factor_count}/${
         risk.available_factor_count + risk.missing_factor_count
       }.`
-    : strOrNull(pick(result, ['data_sufficiency_note']))
+    : engagementRows.length < 3
+      ? `Fewer than three engagement observations (${engagementRows.length}) — no trend line drawn.`
+      : strOrNull(pick(result, ['data_sufficiency_note']))
 
   return {
     employeeId,
     profile,
     modules,
     risk,
-    charts: [],
+    charts,
     freshness,
     responsibleUseNote: RESPONSIBLE_USE_NOTE,
     dataSufficiencyNote,

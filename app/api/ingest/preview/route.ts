@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import { FileSourceAdapter } from '@/lib/ingest/adapter'
 import { buildPreview } from '@/lib/ingest/validate'
+import { authErrorResponse, requireAdmin, requireSession } from '@/lib/auth/guard'
 import type { ApiErrorBody, DatasetPreview } from '@/lib/types'
 
 export async function POST(request: Request) {
   try {
+    const session = await requireSession(request)
+    await requireAdmin(session, new URL(request.url).pathname)
     const form = await request.formData()
     const files = form.getAll('files').filter((f): f is File => f instanceof File)
 
@@ -25,6 +28,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ previews })
   } catch (error) {
+    if (error instanceof Error && 'status' in error) return authErrorResponse(error)
     const body: ApiErrorBody = {
       error: error instanceof Error ? error.message : 'Ingest preview failed',
     }
