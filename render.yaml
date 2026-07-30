@@ -1,0 +1,34 @@
+# Render Blueprint — weekly adversarial auditor.
+# The Next.js web service is provisioned separately in the Render dashboard.
+# This blueprint adds a cron job that pings the /api/adversarial/run endpoint
+# on the deployed app every Monday at 08:00 UTC with the shared secret.
+#
+# Setup (once):
+#   1. In the Render dashboard, add an env var to this cron job:
+#        RENDER_EXTERNAL_URL = https://<your-web-service>.onrender.com
+#        ADVERSARIAL_CRON_SECRET = <a long random string>
+#   2. Copy the same ADVERSARIAL_CRON_SECRET into the web service's env vars.
+#   3. Add ADVERSARIAL_AI_LLM_API_KEY (Anthropic key) to the web service.
+#   4. Apply the blueprint. Verify the cron shows a green run in Render logs.
+
+services:
+  - type: cron
+    name: adversarial-weekly
+    runtime: docker
+    schedule: "0 8 * * 1"   # Mondays at 08:00 UTC
+    dockerCommand: |
+      /bin/sh -c '
+      set -eu
+      if [ -z "${RENDER_EXTERNAL_URL:-}" ]; then
+        echo "RENDER_EXTERNAL_URL is not set" >&2; exit 1
+      fi
+      if [ -z "${ADVERSARIAL_CRON_SECRET:-}" ]; then
+        echo "ADVERSARIAL_CRON_SECRET is not set" >&2; exit 1
+      fi
+      curl -sSf -X POST \
+        -H "Authorization: Bearer $ADVERSARIAL_CRON_SECRET" \
+        -H "Content-Type: application/json" \
+        --max-time 300 \
+        --data "{\"triggeredBy\":\"cron\"}" \
+        "$RENDER_EXTERNAL_URL/api/adversarial/run"
+      '

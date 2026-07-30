@@ -83,6 +83,12 @@ const NAV_GROUPS: NavGroup[] = [
         roles: ['admin'],
       },
       {
+        href: '/admin/adversarial',
+        label: 'Adversarial AI',
+        icon: 'M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4zM9 12l2 2 4-4',
+        roles: ['admin'],
+      },
+      {
         href: '/audit',
         label: 'Audit log',
         icon: 'M4 6h16M4 12h16M4 18h10',
