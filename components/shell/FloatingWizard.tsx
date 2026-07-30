@@ -6,11 +6,17 @@ import { MetricChart } from '@/components/charts/MetricChart'
 import { useFiltersOptional } from '@/components/shell/FilterProvider'
 import {
   EMPTY_FILTER_CONTEXT,
+  type CustomizedReportSpec,
   type DashboardContext,
   type WizardAction,
   type WizardConversationTurn,
   type WizardResponse,
 } from '@/lib/types'
+import {
+  buildWizardReportSpec,
+  findLastChartInConversation,
+  pickRenderableChart,
+} from '@/lib/wizard/reportSpec'
 
 function pageLabel(pathname: string): string {
   if (pathname.startsWith('/advanced-analytics')) return 'advanced_analytics'
@@ -109,7 +115,10 @@ export function FloatingWizard() {
           },
         ])
         if (data.proposedActions?.length) {
-          setPendingAction(data.proposedActions[0] ?? null)
+          const preferred =
+            data.proposedActions.find((a) => a.type === 'create_customized_report') ??
+            data.proposedActions[0]
+          setPendingAction(preferred ?? null)
         }
       } catch (err) {
         setConversation((prev) => [
@@ -146,12 +155,42 @@ export function FloatingWizard() {
       action.type === 'create_customized_report' ||
       action.type === 'update_customized_report'
     ) {
+      const payloadSpec = (action.payload.spec ?? last?.reportSpec ?? {}) as Partial<
+        CustomizedReportSpec
+      >
+      const chart = pickRenderableChart(
+        last?.chart,
+        findLastChartInConversation(conversation),
+      )
+      const fromChart = buildWizardReportSpec({
+        question: payloadSpec.description || last?.answer || 'Wizard report',
+        chart,
+        citations: last?.citations,
+        filters,
+      })
+      const spec: Partial<CustomizedReportSpec> = {
+        ...fromChart,
+        ...payloadSpec,
+        // Always keep renderable visuals — payload historically omitted them.
+        visuals:
+          payloadSpec.visuals?.some((v) => v.chart?.points?.length) ?
+            payloadSpec.visuals
+          : fromChart.visuals,
+        measures:
+          payloadSpec.measures?.length ? payloadSpec.measures : fromChart.measures,
+        dimensions:
+          payloadSpec.dimensions?.length ?
+            payloadSpec.dimensions
+          : fromChart.dimensions,
+        title: payloadSpec.title || fromChart.title,
+      }
+
       const res = await fetch('/api/reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: action.type,
-          spec: action.payload.spec ?? last?.reportSpec,
+          spec,
           confirm: true,
         }),
       })

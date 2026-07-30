@@ -497,7 +497,8 @@ export interface WizardResponse {
   refusalReason: string | null
   proposedActions?: WizardAction[]
   guidance?: InvestigationGuidance | null
-  reportSpec?: CustomizedReportSpec | null
+  /** Draft spec for create/update customized report (filled on save). */
+  reportSpec?: Partial<CustomizedReportSpec> | null
 }
 
 export interface CustomizedReportVisual {

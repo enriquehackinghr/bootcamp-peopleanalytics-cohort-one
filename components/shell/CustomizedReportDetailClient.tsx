@@ -103,6 +103,12 @@ export function CustomizedReportDetailClient() {
             />
           ) : null,
         )}
+        {report && !(report.visuals ?? []).some((v) => v.chart.points?.length) ? (
+          <p className="aa-caveat">
+            This report has no chart visuals yet. Ask the wizard to save a chart as a customized
+            report, then confirm the save.
+          </p>
+        ) : null}
       </section>
       {(report?.tables ?? []).map((t) => (
         <DetailTableView key={t.id} table={t} />
