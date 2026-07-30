@@ -46,6 +46,11 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Admin',
     items: [
       { href: '/admin/upload', label: 'Data upload', icon: 'M12 3v12m0 0l-4-4m4 4l4-4M5 21h14' },
+      {
+        href: '/admin/adversarial',
+        label: 'Adversarial AI',
+        icon: 'M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4zM9 12l2 2 4-4',
+      },
     ],
   },
 ]
