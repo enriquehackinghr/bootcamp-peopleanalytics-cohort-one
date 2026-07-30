@@ -1,11 +1,19 @@
 import type {
+  CustomizedReportSpec,
   DashboardContext,
   FilterContext,
   WizardAction,
+  WizardChartSpec,
+  WizardCitation,
   WizardRequest,
   WizardResponse,
 } from '@/lib/types'
 import { buildWizardSystemPrompt } from '@/lib/wizard/prompt'
+import {
+  buildWizardReportSpec,
+  findLastChartInConversation,
+  pickRenderableChart,
+} from '@/lib/wizard/reportSpec'
 import { runWizardToolQuery } from '@/lib/wizard/tools'
 
 const REFUSAL_PATTERNS: { pattern: RegExp; reason: string; alternative: string }[] = [
@@ -59,30 +67,34 @@ const INCOMPLETE_ANSWER =
 function proposedActionsFor(
   question: string,
   context?: Partial<DashboardContext> | null,
+  reportSpec?: Partial<CustomizedReportSpec> | null,
 ): WizardAction[] {
   const actions: WizardAction[] = []
-  if (/advanced analytics|retention risk|tenure hazard/i.test(question)) {
-    actions.push({
-      type: 'open_page',
-      label: 'Open Advanced Analytics',
-      requiresConfirmation: false,
-      payload: { href: '/advanced-analytics' },
-    })
-  }
   if (/save.*(report|chart)|customized report/i.test(question)) {
     actions.push({
       type: 'create_customized_report',
       label: 'Save as customized report',
       requiresConfirmation: true,
       payload: {
-        spec: {
-          title: 'Wizard report',
-          description: question.slice(0, 160),
-          measures: ['c3_voluntary_attrition_rate'],
-          report_type: 'chart',
-          created_via_wizard: true,
-        },
+        spec:
+          reportSpec ??
+          ({
+            title: 'Wizard report',
+            description: question.slice(0, 160),
+            measures: ['voluntary_attrition_rate'],
+            report_type: 'chart',
+            created_via_wizard: true,
+            visuals: [],
+          } satisfies Partial<CustomizedReportSpec>),
       },
+    })
+  }
+  if (/advanced analytics|retention risk|tenure hazard/i.test(question)) {
+    actions.push({
+      type: 'open_page',
+      label: 'Open Advanced Analytics',
+      requiresConfirmation: false,
+      payload: { href: '/advanced-analytics' },
     })
   }
   if (/methodology|how.*score|weights/i.test(question)) {
@@ -102,6 +114,35 @@ function proposedActionsFor(
     })
   }
   return actions
+}
+
+function withReportArtifacts(
+  base: Omit<WizardResponse, 'reportSpec' | 'proposedActions'> & {
+    proposedActions?: WizardAction[]
+  },
+  opts: {
+    question: string
+    chart: WizardChartSpec | null
+    citations: WizardCitation[]
+    filters: FilterContext
+    context?: Partial<DashboardContext> | null
+  },
+): WizardResponse {
+  const wantsReport = /save.*(report|chart)|customized report/i.test(opts.question)
+  const reportSpec = wantsReport
+    ? buildWizardReportSpec({
+        question: opts.question,
+        chart: opts.chart,
+        citations: opts.citations,
+        filters: opts.filters,
+      })
+    : null
+  return {
+    ...base,
+    chart: opts.chart,
+    reportSpec,
+    proposedActions: proposedActionsFor(opts.question, opts.context, reportSpec),
+  }
 }
 
 function finalizeAnswer(
@@ -177,21 +218,31 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
     : request.filters
 
   const toolResult = await runWizardToolQuery(question, effectiveFilters)
-  const actions = proposedActionsFor(question, request.context)
+  const chartFromHistory = findLastChartInConversation(request.conversation)
+  const wantsReport = /save.*(report|chart)|customized report/i.test(question)
+  // On save, keep the chart the user already saw in chat; otherwise prefer fresh tool output.
+  const groundedChart = wantsReport
+    ? pickRenderableChart(chartFromHistory, toolResult.chart)
+    : pickRenderableChart(toolResult.chart, chartFromHistory)
 
-  const grounded = {
+  const groundedBase = {
     answer: toolResult.fallbackAnswer,
     citations: toolResult.citations,
-    chart: toolResult.chart,
+    chart: groundedChart,
     filterOverridden,
     refused: false,
     refusalReason: null,
-    proposedActions: actions,
   }
 
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
-    return grounded
+    return withReportArtifacts(groundedBase, {
+      question,
+      chart: groundedChart,
+      citations: toolResult.citations,
+      filters: effectiveFilters,
+      context: request.context,
+    })
   }
 
   const system = buildWizardSystemPrompt()
@@ -234,7 +285,13 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
   if (!completion.ok) {
     const text = await completion.text()
     console.error('OpenAI error', text)
-    return grounded
+    return withReportArtifacts(groundedBase, {
+      question,
+      chart: groundedChart,
+      citations: toolResult.citations,
+      filters: effectiveFilters,
+      context: request.context,
+    })
   }
 
   const payload = (await completion.json()) as {
@@ -253,13 +310,26 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
     parsed = { answer: toolResult.fallbackAnswer }
   }
 
-  return {
-    answer: finalizeAnswer(parsed.answer, toolResult.fallbackAnswer),
-    citations: toolResult.citations,
-    chart: parsed.chart ?? toolResult.chart,
-    filterOverridden,
-    refused: Boolean(parsed.refused),
-    refusalReason: parsed.refusalReason ?? null,
-    proposedActions: actions,
-  }
+  const chart = pickRenderableChart(
+    pickRenderableChart(parsed.chart, toolResult.chart),
+    chartFromHistory,
+  )
+
+  return withReportArtifacts(
+    {
+      answer: finalizeAnswer(parsed.answer, toolResult.fallbackAnswer),
+      citations: toolResult.citations,
+      chart,
+      filterOverridden,
+      refused: Boolean(parsed.refused),
+      refusalReason: parsed.refusalReason ?? null,
+    },
+    {
+      question,
+      chart,
+      citations: toolResult.citations,
+      filters: effectiveFilters,
+      context: request.context,
+    },
+  )
 }
