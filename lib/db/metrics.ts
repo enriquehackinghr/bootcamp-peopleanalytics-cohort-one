@@ -946,7 +946,7 @@ async function compaHistogram(filters: FilterContext): Promise<ChartPayload> {
     dimension: 'compa_ratio_bucket',
     measure: 'compa_ratio',
     points,
-    referenceLines: [{ value: 1, label: '1.00 midpoint' }],
+    referenceLines: [{ value: 1, label: 'Midpoint' }],
     methodologyId: 'compa_ratio',
     summary: 'Diverging around 1.00; count below 0.90 called out in KPIs.',
     emptyReason: points.length ? null : 'No compa-ratio values loaded.',

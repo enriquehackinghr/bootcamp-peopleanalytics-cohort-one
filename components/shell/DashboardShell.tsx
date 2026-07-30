@@ -17,7 +17,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
         <FilterBar />
         {children}
       </main>
-      <Suspense fallback={null}>
+      <Suspense fallback={<aside className="wizard-rail" aria-hidden="true" />}>
         <FloatingWizard />
       </Suspense>
     </div>

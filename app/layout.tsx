@@ -1,17 +1,10 @@
 import type { Metadata } from 'next'
-import { DM_Sans, Instrument_Serif } from 'next/font/google'
+import { Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
 
-const dmSans = DM_Sans({
+const plusJakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
-  variable: '--font-dm-sans',
-  display: 'swap',
-})
-
-const instrumentSerif = Instrument_Serif({
-  weight: '400',
-  subsets: ['latin'],
-  variable: '--font-instrument',
+  variable: '--font-sans',
   display: 'swap',
 })
 
@@ -28,9 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${dmSans.variable} ${instrumentSerif.variable}`}>
-        {children}
-      </body>
+      <body className={plusJakarta.variable}>{children}</body>
     </html>
   )
 }

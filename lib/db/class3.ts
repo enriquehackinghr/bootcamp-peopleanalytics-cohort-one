@@ -104,8 +104,16 @@ function pick(row: RpcRow, keys: string[]): unknown {
   return undefined
 }
 
+/** Coerce jsonb RPC payloads into row arrays (arrays pass through; objects → []). */
+function asRpcRows(data: unknown): RpcRow[] {
+  if (Array.isArray(data)) {
+    return data.filter((row): row is RpcRow => row !== null && typeof row === 'object')
+  }
+  return []
+}
+
 function rowsToPoints(
-  rows: RpcRow[],
+  rows: unknown,
   xKeys: string[],
   yKeys: string[],
   opts: { seriesKeys?: string[]; nKeys?: string[]; minCell?: number } = {},
@@ -113,7 +121,7 @@ function rowsToPoints(
   const minCell = opts.minCell ?? 0
   let suppressed = false
   const points: ChartSeriesPoint[] = []
-  for (const row of rows) {
+  for (const row of asRpcRows(rows)) {
     const x = pick(row, xKeys)
     const y = pick(row, yKeys)
     if (x === undefined || y === undefined) continue
@@ -244,7 +252,7 @@ async function cohortSurvivalChart(filters: FilterContext): Promise<ChartPayload
   const title = 'Cohort survival by hire year'
   if (!hasDatabaseConfig()) return emptyChart(id, title, 'line', 'hire_year', 'survival_rate')
 
-  const rows = await rpcJson<RpcRow[]>('c3_cohort_survival', filterParams(filters), [])
+  const rows = asRpcRows(await rpcJson<unknown>('c3_cohort_survival', filterParams(filters), []))
   const points: ChartSeriesPoint[] = []
   let suppressed = false
   const marks: [string, string][] = [
@@ -614,13 +622,22 @@ async function managerCharts(filters: FilterContext): Promise<[ChartPayload, Cha
     ]
   }
 
-  const rows = await rpcJson<RpcRow[]>('c3_manager_effectiveness', filterParams(filters), [])
+  const rows = asRpcRows(await rpcJson<unknown>('c3_manager_effectiveness', filterParams(filters), []))
   const eligible = rows.filter((r) => !boolOrFalse(pick(r, ['excluded'])))
+
+  const componentOf = (row: RpcRow, key: string): number | null => {
+    const nested = row.components
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      const fromNested = numOrNull((nested as RpcRow)[key])
+      if (fromNested !== null) return fromNested
+    }
+    return numOrNull(pick(row, [key]))
+  }
 
   const scatterPoints: ChartSeriesPoint[] = []
   for (const row of eligible) {
     const teamSize = numOrNull(pick(row, ['team_size']))
-    const retention = numOrNull(pick(row, ['retention']))
+    const retention = componentOf(row, 'retention')
     if (teamSize === null || retention === null) continue
     scatterPoints.push({
       x: teamSize,
@@ -628,8 +645,8 @@ async function managerCharts(filters: FilterContext): Promise<[ChartPayload, Cha
       label: strOrNull(pick(row, ['manager_id'])) ?? undefined,
       meta: {
         managerId: strOrNull(pick(row, ['manager_id'])),
-        effectivenessScore: numOrNull(pick(row, ['composite'])),
-        engagementIndex: numOrNull(pick(row, ['engagement'])),
+        effectivenessScore: numOrNull(pick(row, ['composite_score', 'composite'])),
+        engagementIndex: componentOf(row, 'engagement_vs_company') ?? componentOf(row, 'engagement'),
       },
     })
   }
@@ -652,13 +669,13 @@ async function managerCharts(filters: FilterContext): Promise<[ChartPayload, Cha
   }
 
   const avg = (key: string): number | null => {
-    const values = eligible.map((r) => numOrNull(pick(r, [key]))).filter((v): v is number => v !== null)
+    const values = eligible.map((r) => componentOf(r, key)).filter((v): v is number => v !== null)
     return values.length ? Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)) : null
   }
   const componentValues: { label: string; value: number | null }[] = [
     { label: 'Retention', value: avg('retention') },
-    { label: 'Engagement', value: avg('engagement') },
-    { label: 'Rating deviation', value: avg('rating_dev') },
+    { label: 'Engagement', value: avg('engagement_vs_company') },
+    { label: 'Rating deviation', value: avg('rating_distribution_deviation') },
     { label: 'Promotion rate', value: avg('promotion_rate') },
   ]
   const componentPoints: ChartSeriesPoint[] = componentValues
@@ -687,8 +704,8 @@ async function ratingDistributionChart(filters: FilterContext): Promise<ChartPay
   const title = 'Performance rating distribution'
   if (!hasDatabaseConfig()) return emptyChart(id, title, 'histogram', 'rating', 'observed_pct')
 
-  const rows = await rpcJson<RpcRow[]>('c3_rating_distribution', filterParams(filters), [])
-  const { points } = rowsToPoints(rows, ['rating'], ['observed_pct'])
+  const rows = await rpcJson<unknown>('c3_rating_distribution', filterParams(filters), [])
+  const { points } = rowsToPoints(rows, ['rating'], ['pct', 'observed_pct', 'n'])
 
   return {
     id,
@@ -744,8 +761,8 @@ async function readinessDistributionChart(filters: FilterContext): Promise<Chart
   const title = 'Promotion readiness distribution'
   if (!hasDatabaseConfig()) return emptyChart(id, title, 'horizontal_bar', 'readiness', 'headcount')
 
-  const rows = await rpcJson<RpcRow[]>('c3_readiness_distribution', filterParams(filters), [])
-  const { points } = rowsToPoints(rows, ['class'], ['n'])
+  const rows = await rpcJson<unknown>('c3_readiness_distribution', filterParams(filters), [])
+  const { points } = rowsToPoints(rows, ['readiness', 'class'], ['n'])
 
   return {
     id,
@@ -767,9 +784,33 @@ async function benchCoverageChart(filters: FilterContext): Promise<ChartPayload>
   const title = 'Succession bench coverage'
   if (!hasDatabaseConfig()) return emptyChart(id, title, 'horizontal_bar', 'role_or_function', 'coverage_pct')
 
-  const rows = await rpcJson<RpcRow[]>('c3_bench_coverage', filterParams(filters), [])
-  const { points } = rowsToPoints(rows, ['role'], ['coverage'])
-  const limitation = strOrNull(pick(rows[0] ?? {}, ['limitation']))
+  // RPC returns a single summary object (not a row array) — see metrics.c3_bench_coverage.
+  const row = await rpcJson<RpcRow>('c3_bench_coverage', filterParams(filters), {})
+  const suppressed = boolOrFalse(pick(row, ['suppressed']))
+  const coveragePct = numOrNull(pick(row, ['proxy_successor_pct_of_active']))
+  const coverageRatio = numOrNull(pick(row, ['proxy_successor_coverage_ratio']))
+  const successorCount = numOrNull(pick(row, ['proxy_successor_count']))
+  const managerPositions = numOrNull(pick(row, ['manager_positions']))
+  const limitation =
+    strOrNull(pick(row, ['data_note', 'limitation'])) ??
+    'Bench coverage is a nine-box proxy for succession-ready strength, not a formal successor designation.'
+
+  const points: ChartSeriesPoint[] = suppressed
+    ? []
+    : coveragePct !== null
+      ? [
+          {
+            x: 'Ready-now share of active',
+            y: coveragePct,
+            meta: { successorCount, managerPositions, coverageRatio },
+          },
+        ]
+      : []
+
+  const ratioNote =
+    coverageRatio !== null && managerPositions !== null && successorCount !== null
+      ? ` Proxy successors ${successorCount.toLocaleString()} vs ${managerPositions.toLocaleString()} manager seats (ratio ${coverageRatio}).`
+      : ''
 
   return {
     id,
@@ -781,9 +822,10 @@ async function benchCoverageChart(filters: FilterContext): Promise<ChartPayload>
     unit: '%',
     methodologyId: 'succession_bench',
     summary: points.length
-      ? limitation ?? 'Share of active headcount flagged as a ready-now successor for a critical role.'
+      ? `${limitation}${ratioNote}`
       : 'No bench coverage data available for the current filters.',
-    emptyReason: points.length ? null : 'c3_bench_coverage returned no rows.',
+    emptyReason: points.length ? null : 'c3_bench_coverage returned no usable coverage measures.',
+    suppressed,
   }
 }
 
