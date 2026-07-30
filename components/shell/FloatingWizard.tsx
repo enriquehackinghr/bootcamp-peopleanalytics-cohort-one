@@ -291,11 +291,19 @@ export function FloatingWizard() {
           void ask()
         }}
       >
-        <input
+        <textarea
+          className="wizard-compose"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              void ask()
+            }
+          }}
           placeholder="Ask about cohorts, attrition, managers…"
           aria-label="Wizard question"
+          rows={3}
         />
         <button type="submit" disabled={loading || !question.trim()}>
           Ask
