@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { MetricChart } from '@/components/charts/MetricChart'
 import { useFiltersOptional } from '@/components/shell/FilterProvider'
@@ -21,15 +21,21 @@ function pageLabel(pathname: string): string {
   return seg
 }
 
+const STARTERS = [
+  'Where is voluntary attrition highest?',
+  'Which functions have elevated flight risk?',
+  'Summarize tenure and headcount mix',
+]
+
 export function FloatingWizard() {
   const pathname = usePathname() ?? '/overview'
   const router = useRouter()
   const searchParams = useSearchParams()
   const filtersApi = useFiltersOptional()
   const filters = filtersApi?.filters ?? EMPTY_FILTER_CONTEXT
+  const messagesRef = useRef<HTMLDivElement>(null)
 
-  const [open, setOpen] = useState(false)
-  const [expanded, setExpanded] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
   const [conversation, setConversation] = useState<WizardConversationTurn[]>([])
@@ -37,8 +43,14 @@ export function FloatingWizard() {
   const [pendingAction, setPendingAction] = useState<WizardAction | null>(null)
 
   useEffect(() => {
-    if (searchParams.get('wizard') === '1') setOpen(true)
+    if (searchParams.get('wizard') === '1') setCollapsed(false)
   }, [searchParams])
+
+  useEffect(() => {
+    const el = messagesRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [conversation, loading])
 
   const context: DashboardContext = useMemo(
     () => ({
@@ -67,49 +79,52 @@ export function FloatingWizard() {
     [pathname, filters],
   )
 
-  const ask = useCallback(async () => {
-    const q = question.trim()
-    if (!q || loading) return
-    setLoading(true)
-    setConversation((prev) => [...prev, { role: 'user', content: q }])
-    setQuestion('')
-    try {
-      const res = await fetch('/api/wizard', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: q,
-          filters,
-          context,
-          conversation,
-        }),
-      })
-      const data = (await res.json()) as WizardResponse
-      setLast(data)
-      setConversation((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data.answer,
-          chart: data.chart,
-          measures: data.citations.map((c) => c.measureId),
-        },
-      ])
-      if (data.proposedActions?.length) {
-        setPendingAction(data.proposedActions[0] ?? null)
+  const ask = useCallback(
+    async (raw?: string) => {
+      const q = (raw ?? question).trim()
+      if (!q || loading) return
+      setLoading(true)
+      setConversation((prev) => [...prev, { role: 'user', content: q }])
+      setQuestion('')
+      try {
+        const res = await fetch('/api/wizard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: q,
+            filters,
+            context,
+            conversation,
+          }),
+        })
+        const data = (await res.json()) as WizardResponse
+        setLast(data)
+        setConversation((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: data.answer,
+            chart: data.chart,
+            measures: data.citations.map((c) => c.measureId),
+          },
+        ])
+        if (data.proposedActions?.length) {
+          setPendingAction(data.proposedActions[0] ?? null)
+        }
+      } catch (err) {
+        setConversation((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: err instanceof Error ? err.message : 'Wizard request failed',
+          },
+        ])
+      } finally {
+        setLoading(false)
       }
-    } catch (err) {
-      setConversation((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: err instanceof Error ? err.message : 'Wizard request failed',
-        },
-      ])
-    } finally {
-      setLoading(false)
-    }
-  }, [question, loading, filters, context, conversation])
+    },
+    [question, loading, filters, context, conversation],
+  )
 
   async function confirmAction(action: WizardAction) {
     if (action.type.startsWith('open_')) {
@@ -124,7 +139,6 @@ export function FloatingWizard() {
       return
     }
     if (action.type === 'apply_filters' && action.payload.filters) {
-      // FilterProvider applies via URL; navigate with query if provided
       setPendingAction(null)
       return
     }
@@ -164,41 +178,58 @@ export function FloatingWizard() {
     }
   }
 
-  if (!open) {
+  if (collapsed) {
     return (
-      <button
-        type="button"
-        className="wizard-fab"
-        aria-label="Open analytics wizard"
-        onClick={() => setOpen(true)}
-      >
-        Wizard
-      </button>
+      <aside className="wizard-rail wizard-rail--collapsed" aria-label="Analytics wizard">
+        <button
+          type="button"
+          className="wizard-rail-expand"
+          onClick={() => setCollapsed(false)}
+          aria-label="Expand analytics wizard"
+          title="Open wizard"
+        >
+          <span className="wizard-rail-expand-label">Wizard</span>
+        </button>
+      </aside>
     )
   }
 
   return (
-    <div
-      className={`wizard-panel ${expanded ? 'wizard-panel--expanded' : ''}`}
-      role="dialog"
-      aria-label="Analytics wizard"
-    >
-      <header className="wizard-panel-header">
-        <strong>Analyst Wizard</strong>
-        <div className="wizard-panel-actions">
-          <button type="button" onClick={() => setExpanded((v) => !v)}>
-            {expanded ? 'Collapse' : 'Expand'}
-          </button>
-          <button type="button" onClick={() => setOpen(false)} aria-label="Close wizard">
-            Close
-          </button>
+    <aside className="wizard-rail" aria-label="Analytics wizard">
+      <header className="wizard-rail-header">
+        <div className="wizard-rail-heading">
+          <p className="wizard-rail-kicker">Ask Meridian</p>
+          <h2 className="wizard-rail-title">Analyst Wizard</h2>
         </div>
+        <button
+          type="button"
+          className="wizard-rail-collapse"
+          onClick={() => setCollapsed(true)}
+          aria-label="Collapse wizard"
+          title="Collapse wizard"
+        >
+          ⟩
+        </button>
       </header>
+
       <p className="wizard-context">
-        Context: {context.current_page}
+        Viewing <strong>{context.current_page.replace(/_/g, ' ')}</strong>
         {filters.functions.length ? ` · ${filters.functions.join(', ')}` : ''}
       </p>
-      <div className="wizard-messages">
+
+      <div className="wizard-messages" ref={messagesRef}>
+        {conversation.length === 0 ? (
+          <div className="wizard-empty">
+            <p>Ask about attrition, risk, tenure, managers, or the current page filters.</p>
+            <div className="wizard-starters">
+              {STARTERS.map((s) => (
+                <button key={s} type="button" onClick={() => void ask(s)}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {conversation.map((turn, i) => (
           <div key={i} className={`wizard-msg wizard-msg--${turn.role}`}>
             <p>{turn.content}</p>
@@ -220,8 +251,9 @@ export function FloatingWizard() {
             ) : null}
           </div>
         ))}
-        {loading ? <p className="wizard-msg">Thinking…</p> : null}
+        {loading ? <p className="wizard-msg wizard-msg--assistant">Thinking…</p> : null}
       </div>
+
       {last?.filterOverridden ? (
         <p className="aa-caveat">Note: dashboard filters were overridden for this answer.</p>
       ) : null}
@@ -231,6 +263,7 @@ export function FloatingWizard() {
           risk-v0.2
         </p>
       ) : null}
+
       {pendingAction ? (
         <div className="wizard-confirm">
           <p>Proposed: {pendingAction.label}</p>
@@ -250,6 +283,7 @@ export function FloatingWizard() {
           )}
         </div>
       ) : null}
+
       <form
         className="wizard-input-row"
         onSubmit={(e) => {
@@ -257,16 +291,24 @@ export function FloatingWizard() {
           void ask()
         }}
       >
-        <input
+        <textarea
+          className="wizard-compose"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              void ask()
+            }
+          }}
           placeholder="Ask about cohorts, attrition, managers…"
           aria-label="Wizard question"
+          rows={3}
         />
-        <button type="submit" disabled={loading}>
+        <button type="submit" disabled={loading || !question.trim()}>
           Ask
         </button>
       </form>
-    </div>
+    </aside>
   )
 }

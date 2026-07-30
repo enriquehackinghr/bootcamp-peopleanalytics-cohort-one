@@ -62,8 +62,17 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <span className="brand-mark" aria-hidden="true" />
-        <span className="brand-name">Meridian</span>
+        <span className="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.25" />
+            <path d="M12 3v18M3 12h18" stroke="currentColor" strokeWidth="1.25" />
+            <circle cx="12" cy="12" r="2.25" fill="currentColor" />
+          </svg>
+        </span>
+        <div className="brand-copy">
+          <span className="brand-name">Meridian</span>
+          <span className="brand-tag">People survey</span>
+        </div>
       </div>
 
       {NAV_GROUPS.map((group) => (
