@@ -44,15 +44,20 @@ export function Employee360Client() {
   return (
     <>
       <header className="page-header">
-        <p className="eyebrow">Limited Employee 360</p>
-        <h1 className="page-title">Employee {employeeId}</h1>
+        <p className="eyebrow">Employee 360</p>
+        <h1 className="page-title">
+          {data?.profile?.name
+            ? String(data.profile.name)
+            : data?.profile?.first_name
+              ? `${data.profile.first_name} ${data.profile.last_name ?? ''}`.trim()
+              : `Employee ${employeeId}`}
+        </h1>
         <p className="lede">
-          Analytical context reachable from an entity you already viewing.
-          Individual risk appears only here, always with the full factor
-          breakdown.
+          Timeline, compensation, performance, talent, engagement (0–10 instrument only), and
+          transparent retention-risk factors. Field access follows your role and reporting tree.
         </p>
         <p>
-          <Link href="/advanced-analytics">← Advanced Analytics</Link>
+          <Link href="/find-employees">← Employee Finder</Link>
         </p>
       </header>
 

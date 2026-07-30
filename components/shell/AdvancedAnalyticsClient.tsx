@@ -15,26 +15,31 @@ import {
 } from '@/lib/types'
 
 const SECTIONS = [
-  { id: 'attrition-patterns', label: 'Attrition patterns' },
-  { id: 'retention-drivers', label: 'Retention drivers' },
-  { id: 'org-events', label: 'Organizational events' },
-  { id: 'exit-themes', label: 'Exit-interview themes' },
-  { id: 'risk-indicators', label: 'Risk indicators' },
-  { id: 'backtest', label: 'Backtest and lift' },
-  { id: 'manager-effectiveness', label: 'Manager effectiveness' },
-  { id: 'talent-readiness', label: 'Talent and readiness' },
-  { id: 'methodology', label: 'Methodology' },
-  { id: 'guidance', label: 'Investigation guidance' },
+  { id: 'attrition', label: 'Attrition' },
+  { id: 'retention-drivers', label: 'Retention Drivers' },
+  { id: 'manager-effectiveness', label: 'Manager Effectiveness' },
+  { id: 'talent', label: 'Talent' },
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]['id']
 
 const SECTION_CHART_PREFIX: Record<string, string[]> = {
-  'attrition-patterns': [
+  attrition: [
     'attrition_over_time',
     'attrition_by_cut',
     'tenure_hazard',
     'cohort_survival',
+    'risk_band_distribution',
+    'risk_factor_contribution',
+    'risk_by_cohort',
+    'risk_backtest_lift',
+    'data_sufficiency_summary',
+    'exit_driver_frequency',
+    'exit_themes',
+    'exit_contradictions',
+    'attrition_around_manager_change',
+    'attrition_after_reorg',
+    'retention_after_location_change',
   ],
   'retention-drivers': [
     'exit_rate_by_compa_band',
@@ -43,24 +48,11 @@ const SECTION_CHART_PREFIX: Record<string, string[]> = {
     'exit_rate_by_manager_quartile',
     'exit_rate_by_tenure_band',
   ],
-  'org-events': [
-    'attrition_around_manager_change',
-    'attrition_after_reorg',
-    'retention_after_location_change',
-  ],
-  'exit-themes': ['exit_driver_frequency', 'exit_themes', 'exit_contradictions'],
-  'risk-indicators': [
-    'risk_band_distribution',
-    'risk_factor_contribution',
-    'risk_by_cohort',
-    'data_sufficiency_summary',
-  ],
-  backtest: ['risk_backtest_lift'],
   'manager-effectiveness': [
     'manager_effectiveness_scatter',
     'manager_components',
   ],
-  'talent-readiness': [
+  talent: [
     'rating_distribution',
     'calibration_outliers',
     'nine_box_migration',
@@ -99,7 +91,7 @@ export function AdvancedAnalyticsClient() {
   const filterKey = useMemo(() => JSON.stringify(filters), [filters])
   const [data, setData] = useState<AdvancedAnalyticsResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<SectionId>('attrition-patterns')
+  const [activeTab, setActiveTab] = useState<SectionId>('attrition')
 
   useEffect(() => {
     let cancelled = false
@@ -138,12 +130,11 @@ export function AdvancedAnalyticsClient() {
   return (
     <>
       <header className="page-header">
-        <p className="eyebrow">Class 3</p>
+        <p className="eyebrow">Class 4</p>
         <h1 className="page-title">Advanced Analytics</h1>
         <p className="lede">
-          Historical attrition, transparent retention-risk indicators, manager
-          effectiveness, and talent readiness — association language only; no
-          fitted model.
+          Four subtabs: Attrition, Retention Drivers, Manager Effectiveness, and Talent.
+          Association language only — no fitted model.
         </p>
       </header>
 
@@ -211,51 +202,45 @@ export function AdvancedAnalyticsClient() {
         id={`aa-panel-${activeTab}`}
         aria-labelledby={`aa-tab-${activeTab}`}
       >
-        {activeTab === 'methodology' ? (
-          <MethodologyPanel panel={data?.methodologyPanel} />
-        ) : activeTab === 'guidance' ? (
-          <div className="guidance-grid">
-            {guidance.length ? (
-              guidance.map((g, i) => <GuidanceCard key={i} guidance={g} />)
-            ) : (
-              <article className="card">
-                <p className="card-subtitle">No investigation guidance for this filter set.</p>
+        <>
+          <div className="chart-grid">
+            {sectionCharts.map((chart) => (
+              <MetricChart
+                key={chart.id}
+                chart={chart}
+                freshness={data?.freshness}
+                sourceTables={[
+                  'employee_snapshots',
+                  'termination_history',
+                  'org_events',
+                  'exit_interviews',
+                ]}
+              />
+            ))}
+            {sectionCharts.length === 0 && data ? (
+              <article className="card chart-card">
+                <h3 className="card-title">
+                  {SECTIONS.find((s) => s.id === activeTab)?.label}
+                </h3>
+                <p className="card-subtitle">
+                  No chart series for this tab yet. Confirm Class 3 datasets are
+                  loaded and semantic RPCs are migrated. Empty states usually mean
+                  missing RPC data or empty points — not a tab wiring bug.
+                </p>
               </article>
-            )}
-          </div>
-        ) : (
-          <>
-            <div className="chart-grid">
-              {sectionCharts.map((chart) => (
-                <MetricChart
-                  key={chart.id}
-                  chart={chart}
-                  freshness={data?.freshness}
-                  sourceTables={[
-                    'employee_snapshots',
-                    'termination_history',
-                    'org_events',
-                    'exit_interviews',
-                  ]}
-                />
-              ))}
-              {sectionCharts.length === 0 && data ? (
-                <article className="card chart-card">
-                  <h3 className="card-title">
-                    {SECTIONS.find((s) => s.id === activeTab)?.label}
-                  </h3>
-                  <p className="card-subtitle">
-                    No chart series for this tab yet. Confirm Class 3 datasets are
-                    loaded and semantic RPCs are migrated.
-                  </p>
-                </article>
-              ) : null}
-            </div>
-            {showManagerTable && data?.table ? (
-              <DetailTableView table={data.table} />
             ) : null}
-          </>
-        )}
+          </div>
+          {showManagerTable && data?.table ? (
+            <DetailTableView table={data.table} />
+          ) : null}
+          {activeTab === 'attrition' && guidance.length ? (
+            <div className="guidance-grid" style={{ marginTop: '1rem' }}>
+              {guidance.slice(0, 3).map((g, i) => (
+                <GuidanceCard key={i} guidance={g} />
+              ))}
+            </div>
+          ) : null}
+        </>
       </div>
     </>
   )
