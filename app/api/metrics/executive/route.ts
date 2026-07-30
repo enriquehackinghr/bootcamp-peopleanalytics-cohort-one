@@ -1,15 +1,18 @@
 import { NextResponse } from 'next/server'
 import { parseFilterContext, readJsonBody } from '@/lib/db/filters'
 import { getExecutiveOverview } from '@/lib/db/metrics'
+import { authErrorResponse, requireSession } from '@/lib/auth/guard'
 import type { ApiErrorBody, FilterContext } from '@/lib/types'
 
 export async function POST(request: Request) {
   try {
+    await requireSession(request)
     const body = await readJsonBody<{ filters?: FilterContext }>(request)
     const filters = parseFilterContext(body.filters)
     const data = await getExecutiveOverview(filters)
     return NextResponse.json(data)
   } catch (error) {
+    if (error instanceof Error && 'status' in error) return authErrorResponse(error)
     const body: ApiErrorBody = {
       error: error instanceof Error ? error.message : 'Executive overview failed',
     }

@@ -6,6 +6,7 @@ import { ThemeToggle } from './ThemeToggle'
 import { FontScaleControl } from './FontScaleControl'
 import { useMetricsCache } from './MetricsCacheProvider'
 import { useFilters } from './FilterProvider'
+import { useSessionOptional } from './SessionProvider'
 import type { ComparisonMode, DataFreshness, PeriodGrain } from '@/lib/types'
 
 const PAGE_TITLES: Record<string, string> = {
@@ -16,10 +17,16 @@ const PAGE_TITLES: Record<string, string> = {
   '/recruiting': 'Recruiting',
   '/engagement': 'Engagement',
   '/advanced-analytics': 'Advanced Analytics',
+  '/workforce-planning': 'Workforce Planning',
   '/customized-reports': 'Customized Reports',
+  '/find-employees': 'Employee Finder',
+  '/org-chart': 'Org chart',
+  '/employees': 'Employee 360',
   '/wizard': 'Wizard',
+  '/wizard-eval': 'Wizard evaluation',
   '/methodology': 'Methodology',
   '/admin/upload': 'Data upload',
+  '/audit': 'Audit log',
   '/drill': 'Drill-through',
 }
 
@@ -92,6 +99,8 @@ export function Topbar() {
   const title = titleFor(pathname)
   const { freshness, ensureFreshness } = useMetricsCache()
   const { filters, setComparison, setPeriodGrain, copyViewLink } = useFilters()
+  const sessionCtx = useSessionOptional()
+  const session = sessionCtx?.session
   const [copied, setCopied] = useState(false)
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const sourcesRef = useRef<HTMLDetailsElement>(null)
@@ -120,11 +129,21 @@ export function Topbar() {
     COMPARISON_OPTIONS.find((o) => o.value === filters.comparison)?.label ??
     'No comparison'
 
+  const boundary = session?.reportingBoundary || asOf
+
   return (
     <header className="topbar">
       <div className="page-title-block">
         <h1 className="topbar-title">{title}</h1>
-        {asOf ? <p className="page-asof">As of {asOf}</p> : null}
+        {session ? (
+          <p className="session-banner">
+            Signed in as {session.fullName} · {session.appRole} · Viewing{' '}
+            {session.visibleEmployeeCount.toLocaleString()} employees · Data as of{' '}
+            {session.reportingBoundary}
+          </p>
+        ) : boundary ? (
+          <p className="page-asof">As of {boundary}</p>
+        ) : null}
       </div>
 
       <div className="topbar-controls">
@@ -216,6 +235,15 @@ export function Topbar() {
 
         <FontScaleControl />
         <ThemeToggle />
+        {session ? (
+          <button
+            type="button"
+            className="topbar-chip"
+            onClick={() => void sessionCtx?.signOut()}
+          >
+            Sign out
+          </button>
+        ) : null}
       </div>
     </header>
   )

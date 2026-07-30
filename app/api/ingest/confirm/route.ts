@@ -7,6 +7,7 @@ import {
   primaryKeyFor,
   validateMappedTables,
 } from '@/lib/ingest/validate'
+import { requireAdmin, requireSession, authErrorResponse } from '@/lib/auth/guard'
 import type { ApiErrorBody, TargetTable } from '@/lib/types'
 
 export const runtime = 'nodejs'
@@ -20,6 +21,8 @@ interface Override {
 
 export async function POST(request: Request) {
   try {
+    const session = await requireSession(request)
+    await requireAdmin(session, new URL(request.url).pathname)
     const form = await request.formData()
     const files = form.getAll('files').filter((f): f is File => f instanceof File)
     const confirm = String(form.get('confirm') ?? '') === 'true'
@@ -107,6 +110,7 @@ export async function POST(request: Request) {
     const result = await promoteTables(mapped, fileNames, validation)
     return NextResponse.json(result)
   } catch (error) {
+    if (error instanceof Error && 'status' in error) return authErrorResponse(error)
     const body: ApiErrorBody = {
       error: error instanceof Error ? error.message : 'Ingest confirm failed',
     }

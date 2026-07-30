@@ -3,14 +3,17 @@
 import { Suspense, type ReactNode } from 'react'
 import { MetricsCacheProvider } from '@/components/shell/MetricsCacheProvider'
 import { FilterProvider } from '@/components/shell/FilterProvider'
+import { SessionProvider } from '@/components/shell/SessionProvider'
 import { Sidebar } from '@/components/shell/Sidebar'
 import { Topbar } from '@/components/shell/Topbar'
 import { FilterBar } from '@/components/shell/FilterBar'
 import { FloatingWizard } from '@/components/shell/FloatingWizard'
+import { AuditPageTracker } from '@/components/shell/AuditPageTracker'
 
 function ShellChrome({ children }: { children: ReactNode }) {
   return (
     <div className="app-shell">
+      <AuditPageTracker />
       <Sidebar />
       <Topbar />
       <main className="main">
@@ -34,20 +37,22 @@ function ShellWithFilters({ children }: { children: ReactNode }) {
 
 export function DashboardShell({ children }: { children: ReactNode }) {
   return (
-    <MetricsCacheProvider>
-      <Suspense
-        fallback={
-          <div className="app-shell">
-            <Sidebar />
-            <main className="main">
-              <p className="admin-meta">Loading filters…</p>
-              {children}
-            </main>
-          </div>
-        }
-      >
-        <ShellWithFilters>{children}</ShellWithFilters>
-      </Suspense>
-    </MetricsCacheProvider>
+    <SessionProvider>
+      <MetricsCacheProvider>
+        <Suspense
+          fallback={
+            <div className="app-shell">
+              <Sidebar />
+              <main className="main">
+                <p className="admin-meta">Loading filters…</p>
+                {children}
+              </main>
+            </div>
+          }
+        >
+          <ShellWithFilters>{children}</ShellWithFilters>
+        </Suspense>
+      </MetricsCacheProvider>
+    </SessionProvider>
   )
 }

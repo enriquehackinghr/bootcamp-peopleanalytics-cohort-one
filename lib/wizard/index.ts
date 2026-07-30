@@ -18,8 +18,15 @@ import {
   guardFunctionHeadcountAnswer,
   runWizardToolQuery,
 } from '@/lib/wizard/tools'
+import { listActiveToolNames } from '@/lib/wizard/catalog'
 
 const REFUSAL_PATTERNS: { pattern: RegExp; reason: string; alternative: string }[] = [
+  {
+    pattern: /\b(gender|race|ethnicity|veteran|disability|date of birth|age band|demographic)\b/i,
+    reason: 'demographic_channel_restriction',
+    alternative:
+      'Demographic fields are excluded from the Wizard in v0.4 for every role. Authorized executives and admins can use the governed dashboard analytics views instead.',
+  },
   {
     pattern: /rank(ing)?\s+(named\s+)?(individuals?|employees?|people).*(risk|attrition)/i,
     reason: 'named_individual_risk',
@@ -241,9 +248,27 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
         String(toolResult.snapshot.function_scope),
       ))
 
+  const activeTools = listActiveToolNames(request.sessionRole ?? 'viewer')
+  const enrichedCitations: WizardCitation[] = toolResult.citations.map((c) => ({
+    ...c,
+    toolName: c.measureId,
+    scope: request.sessionRole
+      ? `${request.sessionRole}; visible=${request.visibleScopeSize ?? 'n/a'}`
+      : 'session',
+    asOfDate: request.reportingBoundary ?? undefined,
+    dataLoadId: request.dataLoadId ?? undefined,
+    population: request.visibleScopeSize ?? null,
+    suppression: 'threshold n<5',
+    definitionRef: c.measureId,
+  }))
+
+  const citationFooter = request.reportingBoundary
+    ? `\n\nSource: ${enrichedCitations.map((c) => c.toolName || c.measureId).join(', ') || 'dashboard measures'} · role: ${request.sessionRole ?? 'unknown'} · as of ${request.reportingBoundary} (derived reporting boundary) · data load: ${request.dataLoadId ?? 'active'} · active tools: ${activeTools.length}`
+    : ''
+
   const groundedBase = {
-    answer: toolResult.fallbackAnswer,
-    citations: toolResult.citations,
+    answer: `${toolResult.fallbackAnswer}${citationFooter}`,
+    citations: enrichedCitations,
     chart: groundedCharts[0] ?? null,
     charts: groundedCharts,
     filterOverridden,
@@ -254,7 +279,7 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
   const artifactOpts = {
     question,
     charts: groundedCharts,
-    citations: toolResult.citations,
+    citations: enrichedCitations,
     filters: toolResult.effectiveFilters,
     context: request.context,
   }
@@ -264,7 +289,7 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
     return withReportArtifacts(groundedBase, artifactOpts)
   }
 
-  const system = buildWizardSystemPrompt()
+  const system = buildWizardSystemPrompt(activeTools)
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
 
   const completion = await fetch('https://api.openai.com/v1/chat/completions', {

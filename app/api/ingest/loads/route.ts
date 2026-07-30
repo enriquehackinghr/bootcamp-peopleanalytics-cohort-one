@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getServiceSupabase, hasDatabaseConfig } from '@/lib/db/client'
+import { authErrorResponse, requireAdmin, requireSession } from '@/lib/auth/guard'
 import type { ApiErrorBody, DataLoadRecord } from '@/lib/types'
 
 export async function GET() {
   try {
+    const session = await requireSession()
+    await requireAdmin(session)
     if (!hasDatabaseConfig()) {
       const body: ApiErrorBody = { error: 'Database is not configured.' }
       return NextResponse.json(body, { status: 503 })
@@ -35,6 +38,7 @@ export async function GET() {
 
     return NextResponse.json({ loads })
   } catch (error) {
+    if (error instanceof Error && 'status' in error) return authErrorResponse(error)
     const body: ApiErrorBody = {
       error: error instanceof Error ? error.message : 'Failed to list loads',
     }

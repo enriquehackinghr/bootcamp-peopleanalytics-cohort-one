@@ -308,6 +308,15 @@ export interface WizardChartSpec {
 export interface WizardCitation {
   measureId: string
   tables: string[]
+  toolName?: string
+  scope?: string
+  filtersApplied?: string
+  period?: string
+  asOfDate?: string
+  population?: number | null
+  suppression?: string
+  dataLoadId?: string | null
+  definitionRef?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -487,6 +496,11 @@ export interface WizardRequest {
   context?: Partial<DashboardContext> | null
   conversation?: WizardConversationTurn[]
   confirmAction?: WizardAction | null
+  /** Class 4 — role from signed session; tools filtered by catalog status + role */
+  sessionRole?: 'admin' | 'executive' | 'manager' | 'viewer' | null
+  reportingBoundary?: string | null
+  dataLoadId?: string | null
+  visibleScopeSize?: number | null
 }
 
 export interface WizardResponse {
