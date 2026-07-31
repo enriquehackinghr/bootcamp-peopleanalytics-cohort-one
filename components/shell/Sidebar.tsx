@@ -150,50 +150,63 @@ export function Sidebar() {
     <aside className="sidebar">
       <div className="brand">
         <span className="brand-mark" aria-hidden="true">
-          M
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.25" />
+            <path d="M12 3v18M3 12h18" stroke="currentColor" strokeWidth="1.25" />
+            <circle cx="12" cy="12" r="2.25" fill="currentColor" />
+          </svg>
         </span>
-        <div>
-          <p className="brand-name">Meridian</p>
-          <p className="brand-sub">
+        <div className="brand-copy">
+          <span className="brand-name">Meridian</span>
+          <span className="brand-tag">
             {showcase ? 'Student showcase' : 'People Analytics'}
-          </p>
+          </span>
         </div>
       </div>
-      <nav className="nav" aria-label="Primary">
-        {NAV_GROUPS.map((group) => {
-          const items = group.items.filter((item) => {
-            if (!isNavItemAllowed(item.href)) return false
-            if (!item.roles) return true
-            if (!role) return false
-            return item.roles.includes(role)
-          })
-          if (items.length === 0) return null
-          return (
-            <div key={group.label} className="nav-group">
-              <p className="nav-group-label">{group.label}</p>
-              <ul>
-                {items.map((item) => {
-                  const label =
-                    item.href === '/find-employees' ? labelForFinder(role) : item.label
-                  return (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        className={isActive(pathname, item.href) ? 'nav-link active' : 'nav-link'}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-                          <path d={item.icon} strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                        <span>{label}</span>
-                      </Link>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-          )
-        })}
-      </nav>
+
+      {NAV_GROUPS.map((group) => {
+        const items = group.items.filter((item) => {
+          if (!isNavItemAllowed(item.href)) return false
+          if (!item.roles) return true
+          if (!role) return false
+          return item.roles.includes(role)
+        })
+        if (items.length === 0) return null
+        return (
+          <div key={group.label}>
+            <div className="nav-section-label">{group.label}</div>
+            <nav className="nav" aria-label={group.label}>
+              {items.map((item) => {
+                const active = isActive(pathname, item.href)
+                const label =
+                  item.href === '/find-employees' ? labelForFinder(role) : item.label
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="nav-item"
+                    aria-current={active ? 'page' : undefined}
+                  >
+                    <svg
+                      className="nav-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.75}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d={item.icon} />
+                    </svg>
+                    <span>{label}</span>
+                  </Link>
+                )
+              })}
+            </nav>
+          </div>
+        )
+      })}
     </aside>
   )
 }
