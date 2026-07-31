@@ -230,6 +230,13 @@ a {
   grid-template-columns: 232px minmax(0, 1fr) 44px;
 }
 
+.app-shell--no-wizard {
+  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-areas:
+    'sidebar topbar'
+    'sidebar main';
+}
+
 .sidebar {
   grid-area: sidebar;
   background: var(--sidebar-bg);
@@ -1297,6 +1304,10 @@ a {
   .app-shell:has(.wizard-rail--collapsed) {
     grid-template-columns: 200px minmax(0, 1fr) 40px;
   }
+
+  .app-shell--no-wizard {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 960px) {
@@ -1313,6 +1324,15 @@ a {
   .app-shell:has(.wizard-rail--collapsed) {
     grid-template-columns: 1fr;
     grid-template-rows: 52px auto 1fr 44px;
+  }
+
+  .app-shell--no-wizard {
+    grid-template-columns: 1fr;
+    grid-template-rows: 52px auto 1fr;
+    grid-template-areas:
+      'topbar'
+      'sidebar'
+      'main';
   }
 
   .wizard-rail {
@@ -1351,6 +1371,14 @@ a {
       'sidebar'
       'main'
       'wizard';
+  }
+
+  .app-shell--no-wizard {
+    grid-template-rows: 52px auto 1fr;
+    grid-template-areas:
+      'topbar'
+      'sidebar'
+      'main';
   }
   .sidebar {
     position: static;

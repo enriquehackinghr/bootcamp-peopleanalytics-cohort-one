@@ -12,8 +12,9 @@ import { AuditPageTracker } from '@/components/shell/AuditPageTracker'
 import { isWizardEnabled } from '@/lib/features'
 
 function ShellChrome({ children }: { children: ReactNode }) {
+  const wizardOn = isWizardEnabled()
   return (
-    <div className="app-shell">
+    <div className={wizardOn ? 'app-shell' : 'app-shell app-shell--no-wizard'}>
       <AuditPageTracker />
       <Sidebar />
       <Topbar />
@@ -21,7 +22,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
         <FilterBar />
         {children}
       </main>
-      {isWizardEnabled() ? (
+      {wizardOn ? (
         <Suspense fallback={<aside className="wizard-rail" aria-hidden="true" />}>
           <FloatingWizard />
         </Suspense>
@@ -44,7 +45,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       <MetricsCacheProvider>
         <Suspense
           fallback={
-            <div className="app-shell">
+            <div
+              className={
+                isWizardEnabled() ? 'app-shell' : 'app-shell app-shell--no-wizard'
+              }
+            >
               <Sidebar />
               <main className="main">
                 <p className="admin-meta">Loading filters…</p>
