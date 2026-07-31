@@ -7,6 +7,16 @@ import { readJsonBody } from '@/lib/db/filters'
 
 export async function POST(request: Request) {
   try {
+    const { isAuthRequired } = await import('@/lib/features')
+    if (!isAuthRequired()) {
+      return NextResponse.json(
+        {
+          error: 'Email sign-in is disabled in the student showcase. Open the app root to continue.',
+          code: 'feature_disabled',
+        },
+        { status: 403 },
+      )
+    }
     const body = await readJsonBody<{ email?: string }>(request)
     const email = (body.email ?? '').trim()
     const result = await authenticateByEmail(email)

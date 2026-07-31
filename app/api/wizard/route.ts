@@ -13,6 +13,11 @@ import type {
 
 export async function POST(request: Request) {
   try {
+    const { isWizardEnabled, featureDisabledResponse } = await import('@/lib/features')
+    if (!isWizardEnabled()) {
+      return NextResponse.json(featureDisabledResponse('Wizard'), { status: 403 })
+    }
+
     const body = await readJsonBody<{
       question?: string
       filters?: FilterContext

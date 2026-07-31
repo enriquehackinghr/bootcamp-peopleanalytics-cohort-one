@@ -5,6 +5,10 @@ import type { ApiErrorBody, DataLoadRecord } from '@/lib/types'
 
 export async function GET() {
   try {
+    const { isDataUploadEnabled, featureDisabledResponse } = await import('@/lib/features')
+    if (!isDataUploadEnabled()) {
+      return NextResponse.json(featureDisabledResponse('Data upload'), { status: 403 })
+    }
     const session = await requireSession()
     await requireAdmin(session)
     if (!hasDatabaseConfig()) {

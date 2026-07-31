@@ -1,8 +1,8 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Suspense } from 'react'
+import { isStudentShowcase } from '@/lib/features'
 
 function LoginForm() {
   const router = useRouter()
@@ -10,6 +10,21 @@ function LoginForm() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const showcase = isStudentShowcase()
+
+  useEffect(() => {
+    if (!showcase) return
+    const next = search.get('next') || '/overview'
+    window.location.replace(`/api/auth/guest?next=${encodeURIComponent(next)}`)
+  }, [showcase, search])
+
+  if (showcase) {
+    return (
+      <main className="login-page">
+        <p className="admin-meta">Opening student showcase…</p>
+      </main>
+    )
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()

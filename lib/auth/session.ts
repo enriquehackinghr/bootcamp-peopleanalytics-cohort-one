@@ -14,8 +14,11 @@ const ROLES: AppRole[] = ['admin', 'executive', 'manager', 'viewer']
 function sessionSecret(): string {
   const secret = process.env.SESSION_SECRET
   if (secret && secret.length >= 16) return secret
-  // Dev fallback — set SESSION_SECRET in production.
-  return 'meridian-bootcamp-dev-session-secret'
+  // Never ship a shared production fallback. Local/dev only.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('SESSION_SECRET must be set in production (≥16 characters).')
+  }
+  return 'meridian-local-dev-only-not-a-production-secret'
 }
 
 function sign(payload: string): string {
@@ -96,7 +99,22 @@ export function verifySessionToken(token: string | undefined | null): SessionUse
 
 export async function getSession(): Promise<SessionUser | null> {
   const jar = await cookies()
-  return verifySessionToken(jar.get(SESSION_COOKIE)?.value)
+  const existing = verifySessionToken(jar.get(SESSION_COOKIE)?.value)
+  if (existing) return existing
+
+  // Student showcase: allow API/page guards without a cookie yet.
+  const { isStudentShowcase, SHOWCASE_GUEST } = await import('@/lib/features')
+  if (isStudentShowcase()) {
+    return {
+      sessionId: 'showcase-guest',
+      employeeId: SHOWCASE_GUEST.fallback.employeeId,
+      workEmail: SHOWCASE_GUEST.fallback.workEmail,
+      fullName: SHOWCASE_GUEST.fallback.fullName,
+      appRole: SHOWCASE_GUEST.fallback.appRole,
+      expiresAt: Date.now() + SESSION_TTL_MS,
+    }
+  }
+  return null
 }
 
 export function sessionCookieOptions(maxAgeSeconds: number) {

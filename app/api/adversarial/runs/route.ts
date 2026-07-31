@@ -6,6 +6,10 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
+    const { isAdversarialEnabled, featureDisabledResponse } = await import('@/lib/features')
+    if (!isAdversarialEnabled()) {
+      return NextResponse.json(featureDisabledResponse('Adversarial AI'), { status: 403 })
+    }
     const session = await requireSession(request)
     await requireAdmin(session, '/api/adversarial/runs')
     const runs = await listRuns()

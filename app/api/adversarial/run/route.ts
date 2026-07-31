@@ -27,6 +27,11 @@ function isAuthorizedForCron(req: Request): boolean {
 
 export async function POST(request: Request) {
   try {
+    const { isAdversarialEnabled, featureDisabledResponse } = await import('@/lib/features')
+    if (!isAdversarialEnabled()) {
+      return NextResponse.json(featureDisabledResponse('Adversarial AI'), { status: 403 })
+    }
+
     const body = await readJsonBody<RunRequestBody>(request).catch(
       () => ({}) as RunRequestBody,
     )
