@@ -9,6 +9,7 @@ import { Topbar } from '@/components/shell/Topbar'
 import { FilterBar } from '@/components/shell/FilterBar'
 import { FloatingWizard } from '@/components/shell/FloatingWizard'
 import { AuditPageTracker } from '@/components/shell/AuditPageTracker'
+import { isWizardEnabled } from '@/lib/features'
 
 function ShellChrome({ children }: { children: ReactNode }) {
   return (
@@ -20,9 +21,11 @@ function ShellChrome({ children }: { children: ReactNode }) {
         <FilterBar />
         {children}
       </main>
-      <Suspense fallback={<aside className="wizard-rail" aria-hidden="true" />}>
-        <FloatingWizard />
-      </Suspense>
+      {isWizardEnabled() ? (
+        <Suspense fallback={<aside className="wizard-rail" aria-hidden="true" />}>
+          <FloatingWizard />
+        </Suspense>
+      ) : null}
     </div>
   )
 }

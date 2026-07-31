@@ -21,6 +21,10 @@ interface Override {
 
 export async function POST(request: Request) {
   try {
+    const { isDataUploadEnabled, featureDisabledResponse } = await import('@/lib/features')
+    if (!isDataUploadEnabled()) {
+      return NextResponse.json(featureDisabledResponse('Data upload'), { status: 403 })
+    }
     const session = await requireSession(request)
     await requireAdmin(session, new URL(request.url).pathname)
     const form = await request.formData()

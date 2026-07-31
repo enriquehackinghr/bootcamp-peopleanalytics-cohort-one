@@ -9,6 +9,20 @@ Multi-page people analytics product (PRD through Class 5 / v0.5). Developer 1 ow
 - OpenAI API for the Wizard (server-side only)
 - Anthropic API for the adversarial auditor (separate model — two-LLM setup)
 
+## Student showcase mode (default)
+
+This build is frozen open for cohort participants:
+
+- **No email sign-in** — visitors get an executive guest session automatically
+- **Wizard, Wizard eval, Adversarial AI, and Data upload are disabled** (UI hidden + APIs return 403)
+
+To restore full Class 5 tooling locally or on Render, set:
+
+```bash
+NEXT_PUBLIC_STUDENT_SHOWCASE=false
+STUDENT_SHOWCASE=false
+```
+
 ## Local setup
 
 1. Copy env defaults:

@@ -8,6 +8,7 @@ import { useMetricsCache } from './MetricsCacheProvider'
 import { useFilters } from './FilterProvider'
 import { useSessionOptional } from './SessionProvider'
 import type { ComparisonMode, DataFreshness, PeriodGrain } from '@/lib/types'
+import { isStudentShowcase } from '@/lib/features'
 
 const PAGE_TITLES: Record<string, string> = {
   '/overview': 'Executive Overview',
@@ -235,7 +236,7 @@ export function Topbar() {
 
         <FontScaleControl />
         <ThemeToggle />
-        {session ? (
+        {session && !isStudentShowcase() ? (
           <button
             type="button"
             className="topbar-chip"
