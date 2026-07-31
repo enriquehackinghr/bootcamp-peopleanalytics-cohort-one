@@ -36,11 +36,11 @@ body {
   --ink-subtle: #8a8378;
   --border: #d2cbc0;
   --border-strong: #b6aea1;
-  --focus: #0b5f56;
+  --focus: #17365d;
   --meridian: #c4784a;
   --meridian-deep: #8f4f2c;
-  --forest: #0b5f56;
-  --forest-soft: #147a6e;
+  --forest: #17365d;
+  --forest-soft: #235284;
 
   /* Series slots — assign in fixed order, never cycle */
   --s1: #0b5f56;
@@ -80,7 +80,7 @@ body {
   --line: var(--border);
   --ink-soft: var(--ink-muted);
   --teal: var(--forest);
-  --teal-deep: #084840;
+  --teal-deep: #0d2440;
   --text-scale: 1;
 }
 
@@ -95,11 +95,11 @@ body {
   --ink-subtle: #746c62;
   --border: #322e28;
   --border-strong: #4a443c;
-  --focus: #3db8a8;
+  --focus: #7ba7d9;
   --meridian: #e09264;
   --meridian-deep: #c4784a;
-  --forest: #3db8a8;
-  --forest-soft: #2a9a8c;
+  --forest: #7ba7d9;
+  --forest-soft: #5e8bc0;
 
   --s1: #3db8a8;
   --s2: #e09264;
@@ -133,7 +133,7 @@ body {
   --line: var(--border);
   --ink-soft: var(--ink-muted);
   --teal: var(--forest);
-  --teal-deep: #2a9a8c;
+  --teal-deep: #5e8bc0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -147,11 +147,11 @@ body {
     --ink-subtle: #746c62;
     --border: #322e28;
     --border-strong: #4a443c;
-    --focus: #3db8a8;
+    --focus: #7ba7d9;
     --meridian: #e09264;
     --meridian-deep: #c4784a;
-    --forest: #3db8a8;
-    --forest-soft: #2a9a8c;
+    --forest: #7ba7d9;
+    --forest-soft: #5e8bc0;
 
     --s1: #3db8a8;
     --s2: #e09264;
@@ -2018,7 +2018,7 @@ a {
   place-items: center;
   padding: 2rem;
   background:
-    radial-gradient(ellipse at 20% 0%, rgba(11, 95, 86, 0.12), transparent 55%),
+    radial-gradient(ellipse at 20% 0%, rgba(23, 54, 93, 0.12), transparent 55%),
     radial-gradient(ellipse at 90% 100%, rgba(196, 120, 74, 0.14), transparent 50%),
     var(--plane);
 }
@@ -2149,7 +2149,7 @@ a {
   max-height: min(72vh, 900px);
   border: 1px solid var(--border);
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--surface) 88%, #dfe8e4) 0%, var(--surface) 40%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 88%, #dfe4ec) 0%, var(--surface) 40%),
     repeating-linear-gradient(
       90deg,
       transparent 0,
@@ -2208,7 +2208,7 @@ a {
   width: 250px;
   border-color: var(--forest);
   border-top: 3px solid var(--meridian);
-  box-shadow: 0 12px 24px rgba(11, 95, 86, 0.1);
+  box-shadow: 0 12px 24px rgba(23, 54, 93, 0.1);
 }
 
 .org-box--hit {
