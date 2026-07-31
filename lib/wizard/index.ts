@@ -19,6 +19,8 @@ import {
   runWizardToolQuery,
 } from '@/lib/wizard/tools'
 import { listActiveToolNames } from '@/lib/wizard/catalog'
+import { getActiveWizardVersion } from '@/lib/adversarial/versioning'
+import { saveReport } from '@/lib/reports/store'
 
 const REFUSAL_PATTERNS: { pattern: RegExp; reason: string; alternative: string }[] = [
   {
@@ -129,6 +131,8 @@ function proposedActionsFor(
 function withReportArtifacts(
   base: Omit<WizardResponse, 'reportSpec' | 'proposedActions'> & {
     proposedActions?: WizardAction[]
+    actionIncomplete?: boolean
+    actionFailureReason?: string | null
   },
   opts: {
     question: string
@@ -155,6 +159,11 @@ function withReportArtifacts(
     charts: opts.charts,
     reportSpec,
     proposedActions: proposedActionsFor(opts.question, opts.context, reportSpec),
+    actionIncomplete: wantsReport && !reportSpec ? true : base.actionIncomplete,
+    actionFailureReason:
+      wantsReport && !reportSpec
+        ? 'Could not build a previewable report spec yet — confirm once a chart is available, or the failure is stated here rather than hidden behind a repeated number.'
+        : base.actionFailureReason,
   }
 }
 
@@ -185,6 +194,75 @@ function finalizeAnswer(
 
 export async function answerWizard(request: WizardRequest): Promise<WizardResponse> {
   const question = request.question.trim()
+  const wizardBundle = await getActiveWizardVersion()
+
+  // Explicit confirm → persist report to ready (P3).
+  if (request.confirmAction?.type === 'create_customized_report') {
+    const payload = request.confirmAction.payload as {
+      spec?: Partial<CustomizedReportSpec>
+    }
+    const draft = payload.spec
+    if (!draft) {
+      return {
+        answer: 'The request could not be completed — missing report specification.',
+        citations: [],
+        chart: null,
+        charts: [],
+        filterOverridden: false,
+        refused: false,
+        refusalReason: null,
+        actionIncomplete: true,
+        actionFailureReason: 'missing_report_spec',
+        wizardVersion: wizardBundle.wizard_version,
+      }
+    }
+    const saved = await saveReport(
+      {
+        ...draft,
+        lifecycle_state: 'confirmed',
+        wizard_version: wizardBundle.wizard_version,
+        reporting_boundary: request.reportingBoundary ?? null,
+        methodology_version: draft.methodology_version ?? 'class5-v0.5',
+        report_spec_version: 'report-spec-v1',
+      },
+      { createdBy: request.sessionRole ?? 'wizard' },
+    )
+    if (saved.error || !saved.report) {
+      return {
+        answer: `Report creation failed: ${saved.error ?? 'unknown error'}. The failure is stated clearly — this is not a completed report.`,
+        citations: [],
+        chart: null,
+        charts: [],
+        filterOverridden: false,
+        refused: false,
+        refusalReason: null,
+        actionIncomplete: true,
+        actionFailureReason: saved.error ?? 'save_failed',
+        wizardVersion: wizardBundle.wizard_version,
+        reportSpec: { ...draft, lifecycle_state: 'failed', failure_reason: saved.error },
+      }
+    }
+    return {
+      answer: `Customized report “${saved.report.title}” is ready (id ${saved.report.id}). It appears in Customized Reports and can be reopened or exported.`,
+      citations: [],
+      chart: saved.report.visuals[0]?.chart ?? null,
+      charts: saved.report.visuals.map((v) => v.chart),
+      filterOverridden: false,
+      refused: false,
+      refusalReason: null,
+      wizardVersion: wizardBundle.wizard_version,
+      reportSpec: saved.report,
+      proposedActions: [
+        {
+          type: 'open_page',
+          label: 'Open saved report',
+          requiresConfirmation: false,
+          payload: { href: `/customized-reports/${saved.report.id}` },
+        },
+      ],
+    }
+  }
+
   if (!question) {
     return {
       answer: 'Ask a workforce question grounded in the Meridian metrics model.',
@@ -195,6 +273,7 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
       refused: false,
       refusalReason: null,
       proposedActions: [],
+      wizardVersion: wizardBundle.wizard_version,
     }
   }
 
@@ -208,6 +287,7 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
         filterOverridden: false,
         refused: true,
         refusalReason: rule.reason,
+        wizardVersion: wizardBundle.wizard_version,
         proposedActions: [
           {
             type: 'open_page',
@@ -267,13 +347,14 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
     : ''
 
   const groundedBase = {
-    answer: `${toolResult.fallbackAnswer}${citationFooter}`,
+    answer: focusAnswer(question, `${toolResult.fallbackAnswer}${citationFooter}`),
     citations: enrichedCitations,
     chart: groundedCharts[0] ?? null,
     charts: groundedCharts,
     filterOverridden,
     refused: false,
     refusalReason: null,
+    wizardVersion: wizardBundle.wizard_version,
   }
 
   const artifactOpts = {
@@ -284,12 +365,24 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
     context: request.context,
   }
 
+  // Metric-specific methodology — do not dump platform catalog.
+  if (/how (is|do you|are).*(calculat|comput|defin)|methodology for/i.test(question)) {
+    const metricMethod = metricSpecificMethodology(question, toolResult.fallbackAnswer)
+    return withReportArtifacts(
+      {
+        ...groundedBase,
+        answer: `${metricMethod}${citationFooter}`,
+      },
+      artifactOpts,
+    )
+  }
+
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey || toolResult.preferAuthoritative) {
     return withReportArtifacts(groundedBase, artifactOpts)
   }
 
-  const system = buildWizardSystemPrompt(activeTools)
+  const system = `${buildWizardSystemPrompt(activeTools)}\n\n${wizardBundle.report_action_instructions}`
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
 
   const completion = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -319,6 +412,7 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
               'If function_scope is set, scoped_active_headcount is that function’s headcount; company_active_headcount is company-wide — never confuse them.',
               'If the question asks for open roles/requisitions, use open_requisitions exactly.',
               'Do not invent chart points; leave chart null — the server attaches grounded charts.',
+              'Stay relevant: do not append unrelated attrition metrics to a headcount question.',
             ].join(' '),
           }),
         },
@@ -353,22 +447,70 @@ export async function answerWizard(request: WizardRequest): Promise<WizardRespon
     toolResult.fallbackAnswer,
     toolResult.preferAuthoritative,
   )
-  const answer = guardFunctionHeadcountAnswer(
-    rawAnswer,
-    toolResult.snapshot,
-    toolResult.fallbackAnswer,
+  const answer = focusAnswer(
+    question,
+    guardFunctionHeadcountAnswer(
+      rawAnswer,
+      toolResult.snapshot,
+      toolResult.fallbackAnswer,
+    ),
   )
 
   return withReportArtifacts(
     {
-      answer,
+      answer: `${answer}${citationFooter}`,
       citations: toolResult.citations,
       chart: groundedCharts[0] ?? null,
       charts: groundedCharts,
       filterOverridden,
       refused: Boolean(parsed.refused),
       refusalReason: parsed.refusalReason ?? null,
+      wizardVersion: wizardBundle.wizard_version,
     },
     artifactOpts,
   )
+}
+
+/** Strip unrequested attrition drive-bys from focused headcount answers. */
+function focusAnswer(question: string, answer: string): string {
+  const asksHeadcount = /headcount|how many active|active employees/i.test(question)
+  const asksAttrition = /attrition/i.test(question)
+  if (!asksHeadcount || asksAttrition) return answer
+  const lines = answer.split(/\n/)
+  const kept = lines.filter((line) => !/\b(voluntary|involuntary|regrettable)\s+attrition\b|\battrition\s+rate\b/i.test(line))
+  return kept.join('\n').trim() || answer
+}
+
+function metricSpecificMethodology(question: string, fallback: string): string {
+  if (/voluntary/i.test(question)) {
+    return [
+      'Voluntary attrition (metric-specific): employee-initiated separations ÷ average active headcount over the selected period (typically TTM).',
+      'Formula: voluntary_separations / average_active_headcount.',
+      'Source: termination_history + employee_snapshots.',
+      'Limitation: involuntary and regrettable attrition are separate measures and must not be blended.',
+      'Full platform catalog: /methodology#voluntary_attrition_rate',
+      fallback ? `\nGrounded snapshot: ${fallback}` : '',
+    ].join(' ')
+  }
+  if (/engagement/i.test(question)) {
+    return [
+      'Engagement methodology is instrument-specific.',
+      'Survey waves use a 1–5 Likert scale (aggregate only).',
+      'Individual engagement_score_history uses 0–10 per employee.',
+      'These instruments must never share an axis or be averaged together.',
+      'Full catalog: /methodology#engagement_survey',
+    ].join(' ')
+  }
+  if (/headcount|active employee/i.test(question)) {
+    return [
+      'Active headcount: count of employees with employment_status in {Active, On Leave} as of the derived reporting boundary from the current data load.',
+      'Source: employees / employee_snapshots.',
+      'Limitation: not a live headcount as of calendar “today” unless the boundary equals today.',
+      'Full catalog: /methodology',
+    ].join(' ')
+  }
+  return [
+    'Metric-specific methodology for the requested measure (not the full platform catalog).',
+    fallback || 'See /methodology for the linked definition, formula, source tables, and limitations.',
+  ].join(' ')
 }

@@ -4,6 +4,11 @@ import { useEffect, useState } from 'react'
 import { SourceLine } from '@/components/shell/SourceLine'
 import type { PlanningPageResponse } from '@/lib/db/planning'
 
+function money(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—'
+  return `$${Math.round(n).toLocaleString()}`
+}
+
 export function WorkforcePlanningClient() {
   const [data, setData] = useState<PlanningPageResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -38,10 +43,11 @@ export function WorkforcePlanningClient() {
     <>
       <header className="page-header">
         <p className="eyebrow">Workforce planning</p>
-        <h1 className="page-title">Plan versus actual</h1>
+        <h1 className="page-title">Plan versus estimated expense</h1>
         <p className="lede">
-          Headcount attainment and hiring attainment are separate measures. Scenarios are
-          assumption-based — not AI predictions. Reporting boundary:{' '}
+          Headcount attainment and hiring attainment are separate measures. Compensation
+          figures are estimated base-salary expense — not actual payroll spend. Scenarios
+          are assumption-based — not AI predictions. Reporting boundary:{' '}
           {data?.reportingBoundary ?? '…'}.
         </p>
       </header>
@@ -52,6 +58,8 @@ export function WorkforcePlanningClient() {
         </p>
       ) : null}
 
+      {data?.terminologyNote ? <p className="aa-caveat">{data.terminologyNote}</p> : null}
+
       <section className="kpi-strip">
         <article className="kpi-tile">
           <p className="kpi-label">Actual headcount</p>
@@ -60,30 +68,53 @@ export function WorkforcePlanningClient() {
           </p>
         </article>
         <article className="kpi-tile">
-          <p className="kpi-label">Payroll run rate (base)</p>
-          <p className="kpi-value">
-            {r?.payrollRunRate != null
-              ? `$${Math.round(r.payrollRunRate).toLocaleString()}`
-              : '—'}
-          </p>
+          <p className="kpi-label">Est. FY base-salary expense</p>
+          <p className="kpi-value">{money(r?.estimatedFyBaseSalaryExpense)}</p>
         </article>
         <article className="kpi-tile">
           <p className="kpi-label">Approved FY26 budget</p>
           <p className="kpi-value">
-            {r?.approvedBudget != null
-              ? `$${Math.round(r.approvedBudget).toLocaleString()}`
-              : 'n/a'}
+            {r?.approvedBudget != null ? money(r.approvedBudget) : 'n/a'}
           </p>
         </article>
         <article className="kpi-tile">
-          <p className="kpi-label">Growth projection</p>
+          <p className="kpi-label">
+            Budget variance
+            {r?.budgetVarianceLabel === 'over_budget'
+              ? ' (over)'
+              : r?.budgetVarianceLabel === 'under_budget'
+                ? ' (under)'
+                : ''}
+          </p>
+          <p className="kpi-value">{money(r?.budgetVariance)}</p>
+        </article>
+      </section>
+
+      <section className="kpi-strip" style={{ marginTop: '0.75rem' }}>
+        <article className="kpi-tile">
+          <p className="kpi-label">Through boundary</p>
+          <p className="kpi-value">{money(r?.estimatedExpenseThroughBoundary)}</p>
+        </article>
+        <article className="kpi-tile">
+          <p className="kpi-label">Remaining forecast</p>
+          <p className="kpi-value">{money(r?.forecastRemainingExpense)}</p>
+        </article>
+        <article className="kpi-tile">
+          <p className="kpi-label">Vacancy savings (memo only)</p>
+          <p className="kpi-value">{money(r?.vacancySavingsMemo)}</p>
+        </article>
+        <article className="kpi-tile">
+          <p className="kpi-label">Annualized run rate (info)</p>
           <p className="kpi-value">
-            {data?.growthScenario.projectedFyeHeadcount?.toLocaleString() ?? '—'}
+            {money(r?.annualizedRunRateInformational ?? r?.payrollRunRate)}
           </p>
         </article>
       </section>
 
-      <SourceLine freshness={data?.freshness} tables={['employees', 'fy26_comp_budget']} />
+      <SourceLine
+        freshness={data?.freshness}
+        tables={['employees', 'employee_snapshots', 'fy26_comp_budget', 'requisitions', 'recruiters']}
+      />
 
       <article className="card" style={{ marginTop: '1.5rem' }}>
         <h2 className="card-title">Growth scenario assumptions</h2>
@@ -100,9 +131,24 @@ export function WorkforcePlanningClient() {
           value={uplift}
           onChange={(e) => setUplift(Number(e.target.value) || 0)}
         />
-        {data?.growthScenario.bindingConstraint ? (
-          <p className="error">
+        <p className="admin-meta" style={{ marginTop: '0.75rem' }}>
+          Projected FYE headcount:{' '}
+          {data?.growthScenario.projectedFyeHeadcount?.toLocaleString() ?? '—'}
+        </p>
+        {data?.growthScenario.bindingConstraintDetail ? (
+          <p className="aa-caveat" style={{ marginTop: '0.5rem' }}>
+            {data.growthScenario.bindingConstraintDetail}
+          </p>
+        ) : data?.growthScenario.bindingConstraint ? (
+          <p className="aa-caveat">
             Binding constraint: {data.growthScenario.bindingConstraint}
+          </p>
+        ) : null}
+        {data?.growthScenario.pipelineCapacity != null ||
+        data?.growthScenario.recruiterCapacity != null ? (
+          <p className="admin-meta">
+            Pipeline capacity {data.growthScenario.pipelineCapacity ?? '—'} · Recruiter
+            capacity {data.growthScenario.recruiterCapacity ?? '—'}
           </p>
         ) : null}
       </article>

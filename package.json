@@ -9,6 +9,7 @@
     "preview:build": "npm run build && next start --hostname 0.0.0.0 --port 4173",
     "typecheck": "tsc --noEmit",
     "test:class3": "npx tsx scripts/class3-smoke.ts",
+    "test:class5": "npx tsx scripts/class5-smoke.ts",
     "db:migrate": "node scripts/apply-migrations.js"
   },
   "dependencies": {

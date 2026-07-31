@@ -240,4 +240,34 @@ export const METHODOLOGY_FALLBACK: MethodologyEntry[] = [
     definition: 'Headcount by latest performance rating for the filtered population.',
     sourceTables: ['employee_snapshots'],
   },
+
+  // -------------------------------------------------------------------------
+  // Class 5 — signals, planning correction, status contract
+  // -------------------------------------------------------------------------
+  {
+    id: 'post_manager_change_engagement_shift',
+    name: 'Post-manager-change engagement shift',
+    definition:
+      'Observation-based comparison of the last pre-change engagement_score_history observation to the first (and second, when available) post-change observations around an org_events manager_change. Requires sufficient observations on both sides; threshold defaults to 1.0 point on the 0–10 instrument. Never uses day-based windows.',
+    sourceTables: ['engagement_score_history', 'org_events'],
+    notes:
+      'Directional signal for investigation only — not a conclusion about a manager or employee. Responsible-use notice required on every display.',
+  },
+  {
+    id: 'estimated_fy_base_salary_expense',
+    name: 'Estimated FY base-salary expense',
+    definition:
+      'estimated_base_salary_expense_through_boundary + forecast_remaining_period_base_salary_expense. Vacancy savings are memo-only and never subtracted. Not actual payroll spend.',
+    sourceTables: ['employee_snapshots', 'employees', 'fy26_comp_budget'],
+    notes:
+      'Reference informational annualized run rate $128,203,500; approved FY26 budget $151,110,763. Budget variance = estimated − approved; positive = over budget.',
+    reconciliationTarget: '151110763 budget',
+  },
+  {
+    id: 'metric_result_status',
+    name: 'MetricResultStatus',
+    definition:
+      'Structured status on metric results: value | no_data | unavailable | suppressed | error. Genuine zero is a value; missing observations are no_data — never conflated.',
+    sourceTables: [],
+  },
 ]

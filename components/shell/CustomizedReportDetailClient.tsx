@@ -75,6 +75,16 @@ export function CustomizedReportDetailClient() {
           <button type="button" className="text-button" onClick={() => void refresh()}>
             Refresh with latest data
           </button>
+          {' · '}
+          <a
+            className="text-button"
+            href={`/api/reports/${encodeURIComponent(reportId)}/export`}
+          >
+            Export JSON
+          </a>
+          {report?.lifecycle_state ? (
+            <span className="admin-meta"> · state: {report.lifecycle_state}</span>
+          ) : null}
         </p>
       </header>
       {error ? (

@@ -503,6 +503,39 @@ export interface WizardRequest {
   visibleScopeSize?: number | null
 }
 
+/** Metric contract status — distinguishes genuine zero from missing data. */
+export type MetricResultStatus =
+  | 'value'
+  | 'no_data'
+  | 'unavailable'
+  | 'suppressed'
+  | 'error'
+
+export interface CitationContract {
+  measureId: string
+  sourceTables: string[]
+  methodologyId?: string | null
+  dataLoadId?: string | null
+  reportingBoundary?: string | null
+}
+
+export interface MetricResult<T = number | string | object | null> {
+  status: MetricResultStatus
+  value: T
+  reason: string | null
+  population_count: number | null
+  citation: CitationContract | null
+}
+
+export type ReportLifecycleState =
+  | 'draft'
+  | 'preview_ready'
+  | 'confirmed'
+  | 'saving'
+  | 'ready'
+  | 'failed'
+  | 'archived'
+
 export interface WizardResponse {
   answer: string
   citations: WizardCitation[]
@@ -516,6 +549,13 @@ export interface WizardResponse {
   guidance?: InvestigationGuidance | null
   /** Draft spec for create/update customized report (filled on save). */
   reportSpec?: Partial<CustomizedReportSpec> | null
+  /** Structured metric statuses attached to the answer (Class 5). */
+  metricResults?: MetricResult[]
+  /** Wizard artifact bundle version used for this answer. */
+  wizardVersion?: string | null
+  /** True when an action was requested but not completed. */
+  actionIncomplete?: boolean
+  actionFailureReason?: string | null
 }
 
 export interface CustomizedReportVisual {
@@ -550,6 +590,13 @@ export interface CustomizedReportSpec {
   status: 'draft' | 'active' | 'archived'
   created_via_wizard?: boolean
   version?: number
+  /** Class 5 report lifecycle — success only at `ready`. */
+  lifecycle_state?: ReportLifecycleState
+  failure_reason?: string | null
+  wizard_version?: string | null
+  report_spec_version?: string | null
+  reporting_boundary?: string | null
+  methodology_version?: string | null
 }
 
 export interface AdvancedAnalyticsMethodologyPanel {

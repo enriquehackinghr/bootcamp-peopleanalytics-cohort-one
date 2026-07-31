@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server'
 import { getRunDetail } from '@/lib/adversarial/store'
+import { authErrorResponse, requireAdmin, requireSession } from '@/lib/auth/guard'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ runId: string }> },
 ) {
   try {
+    const session = await requireSession(request)
+    await requireAdmin(session, '/api/adversarial/runs')
     const { runId } = await params
     const detail = await getRunDetail(runId)
     if (!detail) {
@@ -15,9 +18,6 @@ export async function GET(
     }
     return NextResponse.json(detail)
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Load run failed' },
-      { status: 500 },
-    )
+    return authErrorResponse(error)
   }
 }
