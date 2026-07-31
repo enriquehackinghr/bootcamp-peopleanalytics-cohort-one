@@ -312,4 +312,11 @@ export const COLUMN_ALIASES: Record<string, string> = {
   termination_reason: 'termination_reason',
   direct_reports: 'direct_reports',
   engagement_score: 'engagement_score',
+  // Performance review workbook (Meridian Class 1–2 extract)
+  effective_date: 'review_date',
+  review_delivered_date: 'review_date',
+  final_rating: 'rating',
+  promotion_recommended: 'promotion_recommendation',
+  cycle_name: 'review_cycle',
+  review_cycle_name: 'review_cycle',
 }

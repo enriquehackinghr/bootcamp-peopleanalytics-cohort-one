@@ -8,6 +8,18 @@ import type {
 } from '@/lib/adversarial/types'
 import { DIMENSION_LABELS } from '@/lib/adversarial/scoring'
 
+type SuiteChoice = 'live' | 'full' | 'legacy'
+type BaselineLabelChoice = 'class5_baseline' | 'class5_post_improvement' | null
+
+type ProposalRow = {
+  proposal_id: string
+  proposed_change: string
+  lifecycle_state: string
+  human_decision: string | null
+  target_layer: string
+  root_cause_classification: string | null
+}
+
 type RunPhase =
   | { status: 'idle' }
   | {
@@ -65,6 +77,11 @@ export function AdversarialClient() {
   const [detail, setDetail] = useState<AdversarialRunDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
+  const [suite, setSuite] = useState<SuiteChoice>('live')
+  const [baselineLabel, setBaselineLabel] = useState<BaselineLabelChoice>(null)
+  const [proposals, setProposals] = useState<ProposalRow[]>([])
+  const [proposalsError, setProposalsError] = useState<string | null>(null)
+  const [proposalBusyId, setProposalBusyId] = useState<string | null>(null)
 
   async function refreshRuns() {
     try {
@@ -75,6 +92,18 @@ export function AdversarialClient() {
       setListError(null)
     } catch (err) {
       setListError(err instanceof Error ? err.message : 'Could not load runs')
+    }
+  }
+
+  async function refreshProposals() {
+    try {
+      const res = await fetch('/api/adversarial/proposals')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not load proposals')
+      setProposals((data.proposals ?? []) as ProposalRow[])
+      setProposalsError(null)
+    } catch (err) {
+      setProposalsError(err instanceof Error ? err.message : 'Could not load proposals')
     }
   }
 
@@ -96,14 +125,40 @@ export function AdversarialClient() {
 
   useEffect(() => {
     void refreshRuns()
+    void refreshProposals()
   }, [])
+
+  async function decideProposal(
+    proposalId: string,
+    decision: 'approve' | 'reject',
+  ) {
+    setProposalBusyId(proposalId)
+    try {
+      const res = await fetch('/api/adversarial/proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'decide', proposalId, decision }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Proposal action failed')
+      await refreshProposals()
+    } catch (err) {
+      setProposalsError(err instanceof Error ? err.message : 'Proposal action failed')
+    } finally {
+      setProposalBusyId(null)
+    }
+  }
 
   async function triggerRun() {
     try {
       const res = await fetch('/api/adversarial/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ triggeredBy: 'manual' }),
+        body: JSON.stringify({
+          triggeredBy: 'manual',
+          suite,
+          baselineLabel,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Adversarial run failed')
@@ -222,23 +277,56 @@ export function AdversarialClient() {
             cron; admins can trigger a run manually below.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={triggerRun}
-          disabled={runningNow}
-          style={{
-            padding: '0.6rem 1rem',
-            borderRadius: 8,
-            border: '1px solid var(--border, #d1d5db)',
-            background: runningNow ? '#e5e7eb' : '#111827',
-            color: runningNow ? '#374151' : '#fff',
-            cursor: runningNow ? 'wait' : 'pointer',
-            fontWeight: 500,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {runningNow ? 'Probing wizard…' : 'Run audit now'}
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+          <div className="admin-field" style={{ marginBottom: 0, minWidth: 180 }}>
+            <label htmlFor="adv-suite">Suite</label>
+            <select
+              id="adv-suite"
+              value={suite}
+              disabled={runningNow}
+              onChange={(e) => setSuite(e.target.value as SuiteChoice)}
+            >
+              <option value="live">live</option>
+              <option value="full">full</option>
+              <option value="legacy">legacy</option>
+            </select>
+          </div>
+          <div className="admin-field" style={{ marginBottom: 0, minWidth: 180 }}>
+            <label htmlFor="adv-baseline">Baseline label</label>
+            <select
+              id="adv-baseline"
+              value={baselineLabel ?? ''}
+              disabled={runningNow}
+              onChange={(e) => {
+                const v = e.target.value
+                setBaselineLabel(
+                  v === '' ? null : (v as 'class5_baseline' | 'class5_post_improvement'),
+                )
+              }}
+            >
+              <option value="">none</option>
+              <option value="class5_baseline">class5_baseline</option>
+              <option value="class5_post_improvement">class5_post_improvement</option>
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={triggerRun}
+            disabled={runningNow}
+            style={{
+              padding: '0.6rem 1rem',
+              borderRadius: 8,
+              border: '1px solid var(--border, #d1d5db)',
+              background: runningNow ? '#e5e7eb' : '#111827',
+              color: runningNow ? '#374151' : '#fff',
+              cursor: runningNow ? 'wait' : 'pointer',
+              fontWeight: 500,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {runningNow ? 'Probing wizard…' : 'Run audit now'}
+          </button>
+        </div>
       </header>
 
       {phase.status === 'running' && (
@@ -292,6 +380,63 @@ export function AdversarialClient() {
         <SummaryTile label="Total runs">
           <span style={{ fontSize: '2rem', fontWeight: 600 }}>{runs.length}</span>
         </SummaryTile>
+      </section>
+
+      <section className="admin-section">
+        <h2 className="card-title">Proposals</h2>
+        {proposalsError && (
+          <p className="error" role="alert">
+            {proposalsError}
+          </p>
+        )}
+        {proposals.length === 0 && !proposalsError ? (
+          <p className="admin-meta">No improvement proposals yet.</p>
+        ) : (
+          <ul className="admin-history">
+            {proposals.map((p) => {
+              const busy = proposalBusyId === p.proposal_id
+              return (
+                <li key={p.proposal_id} className="admin-history-item">
+                  <div>
+                    <p className="admin-card-title">{p.proposed_change}</p>
+                    <p className="admin-meta">
+                      {p.lifecycle_state}
+                      {p.human_decision ? ` · decision ${p.human_decision}` : ''}
+                      {p.target_layer ? ` · ${p.target_layer}` : ''}
+                    </p>
+                    {p.root_cause_classification ? (
+                      <p className="admin-meta">{p.root_cause_classification}</p>
+                    ) : null}
+                  </div>
+                  <div className="admin-actions" style={{ marginTop: 0, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      disabled={
+                        busy ||
+                        (p.lifecycle_state !== 'draft' &&
+                          p.lifecycle_state !== 'pending_review')
+                      }
+                      onClick={() => void decideProposal(p.proposal_id, 'approve')}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        busy ||
+                        (p.lifecycle_state !== 'draft' &&
+                          p.lifecycle_state !== 'pending_review')
+                      }
+                      onClick={() => void decideProposal(p.proposal_id, 'reject')}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </section>
 
       <section>
@@ -358,6 +503,32 @@ export function AdversarialClient() {
             <p style={{ color: 'var(--text-2, #6b7280)' }}>Loading…</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {(detail.answer_quality_score != null ||
+                detail.action_completion_score != null) && (
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap: '.75rem',
+                  }}
+                >
+                  {detail.answer_quality_score != null && (
+                    <SummaryTile label="Answer quality">
+                      <span style={{ fontSize: '1.6rem', fontWeight: 600 }}>
+                        {detail.answer_quality_score}
+                      </span>
+                    </SummaryTile>
+                  )}
+                  {detail.action_completion_score != null && (
+                    <SummaryTile label="Action completion">
+                      <span style={{ fontSize: '1.6rem', fontWeight: 600 }}>
+                        {detail.action_completion_score}
+                      </span>
+                    </SummaryTile>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '.75rem' }}>
                 {dimensionAverages &&
                   Object.entries(DIMENSION_LABELS).map(([key, label]) => (

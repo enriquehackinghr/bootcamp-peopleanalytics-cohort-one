@@ -66,10 +66,22 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/methodology', label: 'Methodology', icon: 'M4 4h16v4H4zM4 12h16v4H4zM4 20h10v0' },
       {
+        href: '/signals',
+        label: 'Signals',
+        icon: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+        roles: ['admin', 'executive'],
+      },
+      {
         href: '/wizard-eval',
         label: 'Wizard eval',
         icon: 'M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11',
         roles: ['admin', 'executive'],
+      },
+      {
+        href: '/admin/quality',
+        label: 'AI Quality',
+        icon: 'M3 12l2-2 4 4L21 4M5 19h14',
+        roles: ['executive'],
       },
     ],
   },
@@ -86,6 +98,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: '/admin/adversarial',
         label: 'Adversarial AI',
         icon: 'M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4zM9 12l2 2 4-4',
+        roles: ['admin'],
+      },
+      {
+        href: '/admin/quality',
+        label: 'AI Quality',
+        icon: 'M3 12l2-2 4 4L21 4M5 19h14',
         roles: ['admin'],
       },
       {

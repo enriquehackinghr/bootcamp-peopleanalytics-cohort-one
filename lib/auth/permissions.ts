@@ -176,8 +176,14 @@ export function canSeeIndividuals(role: AppRole): boolean {
 }
 
 export function canAccessRoute(role: AppRole, pathname: string): boolean {
+  if (pathname.startsWith('/admin/quality') || pathname.startsWith('/api/admin/quality')) {
+    return role === 'admin' || role === 'executive'
+  }
   if (pathname.startsWith('/admin') || pathname.startsWith('/audit')) {
     return role === 'admin'
+  }
+  if (pathname.startsWith('/signals') || pathname.startsWith('/api/signals')) {
+    return role === 'admin' || role === 'executive'
   }
   if (
     pathname.startsWith('/employees') ||
